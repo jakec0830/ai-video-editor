@@ -26,8 +26,8 @@ VPY="$FREECUT/.venv/bin/python3"
 [ -f "$VPY" ] || VPY="$FREECUT/.venv/Scripts/python.exe"   # Windows 路徑
 "$VPY" -m pip install -q --upgrade pip >/dev/null 2>&1
 
-echo "   安裝核心套件 (requests, librosa, matplotlib, pillow, numpy) ..."
-"$VPY" -m pip install -q requests librosa matplotlib pillow numpy
+echo "   安裝核心套件 (requests, pillow, numpy) ..."
+"$VPY" -m pip install -q requests pillow numpy
 
 # --- 2. 依平台裝 Whisper 引擎 -----------------------------------------------
 UNAME="$(uname -s 2>/dev/null || echo unknown)"

@@ -86,7 +86,7 @@ python3 -m venv tools/freecut/.venv
 # 2. 啟動環境並裝套件
 #    Mac/Linux:  source tools/freecut/.venv/bin/activate
 #    Windows:    tools\freecut\.venv\Scripts\activate
-pip install requests librosa matplotlib pillow numpy
+pip install requests pillow numpy
 
 # 3. 裝轉逐字稿引擎（二選一）
 pip install mlx-whisper      # 只有 Apple Silicon Mac 用這個（最快）
