@@ -19,28 +19,52 @@
 
 ## 安裝
 
-### Step 0（這一步你自己做，AI 幫不了）
+新手建議用 **Claude 桌面版 App**：有畫面、不用碰終端機。習慣打指令的人看下面「進階：用終端機」。
 
-先裝好 Claude Code 並登入。因為後面是靠 Claude 帶你裝，所以 Claude 本身一定要先能用：
+### 用桌面版 App（推薦，最適合新手）
 
-- 到 claude.ai 開通 **Claude 訂閱（Pro 或 Max）**。整個流程靠這個驅動，課前就要備好。
-- 裝 **Claude Code**（或 Codex），用你的帳號登入。
+**一、先備好（你自己做）**
 
-### Step 1（讓 AI 幫你裝其他的）
+- 到 claude.ai 開通 **Claude 訂閱（Pro 或 Max）**，整個流程靠這個，課前先備好。
+- 下載安裝 **Claude 桌面版 App**（到 claude.ai 下載 Mac / Windows 版），一般安裝、登入。它本身就內建 Claude Code，你不用另外裝 Node 或 CLI。
+- **Windows** 要另外裝 **Git for Windows**（git-scm.com/downloads/win），裝完把 App 重開。Mac 通常內建 git。
 
-用 Claude Code 打開這個工具包資料夾，然後直接跟它說：
+**二、下載工具包**
 
-> 幫我一步一步安裝設定
+1. 打開 App，點上面的 **Code** 分頁。
+2. 環境選 **Local**（在你自己電腦上跑，才能處理你的影片）。
+3. 先隨便選一個資料夾（例如「文件」），在對話框打：
 
-它會自己跑檢查、看你缺什麼（Node、ffmpeg、字型等），然後一個一個幫你裝，邊裝邊確認。你不用先懂這些是什麼。
+   > 幫我把這個 clone 下來：https://github.com/jakec0830/ai-video-editor.git
 
-有幾步一定要你自己動手，AI 會停下來告訴你（它做不到的）：
+   它會下載成一個 `ai-video-editor` 資料夾。
 
-- 要輸入電腦密碼的（例如 Mac 第一次裝 Homebrew）
-- 要在瀏覽器登入的（例如 heygen 音效庫登入你自己的帳號）
-- Windows 上要點安裝視窗的（例如 Node、字型）
+**三、開始設定**
 
-這些 AI 會明確說「這步換你做：要做什麼、為什麼」，你做完它接著走。
+4. 用 **Select folder（選資料夾）** 選剛剛那個 `ai-video-editor` 資料夾。
+5. 在對話框打：
+
+   > 幫我一步一步安裝設定
+
+6. 照它說的做。它會檢查你缺什麼（Node、ffmpeg、字型等）一個一個幫你裝。有幾步要你自己動手（輸入電腦密碼、瀏覽器登入 heygen），它會停下來明確告訴你「這步換你做」，你做完它接著走。
+
+裝好後把口播影片丟進去，說「幫我剪這支影片」。
+
+### 進階：用終端機 CLI（習慣打指令的人）
+
+```
+# 1. 裝 Claude Code
+curl -fsSL https://claude.ai/install.sh | bash      # Mac / Linux
+# Windows（PowerShell）: irm https://claude.ai/install.ps1 | iex
+# 2. 登入
+claude
+# 3. 下載工具包（會自動建 ai-video-editor 資料夾）
+git clone https://github.com/jakec0830/ai-video-editor.git
+# 4. 進資料夾、開 Claude Code
+cd ai-video-editor
+claude
+# 5. 在裡面打：幫我一步一步安裝設定
+```
 
 ### 如果你想自己裝（Windows 或不想讓 AI 代勞）
 
