@@ -17,5 +17,9 @@ node_modules/
 素材庫/圖片/*
 !素材庫/**/.gitkeep
 
+# 學員的錯誤回報（本機產生，傳給 Jake，不收進 repo）
+錯誤回報/*
+!錯誤回報/.gitkeep
+
 # OS
 .DS_Store
