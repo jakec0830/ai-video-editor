@@ -1,0 +1,17 @@
+# Python env (rebuilt per-machine by setup.sh — never commit)
+tools/freecut/.venv/
+**/__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Student working files (their videos + renders, not part of the kit)
+**/edit/
+**/renders/
+**/*.mp4
+**/*.mov
+**/*.MOV
+
+# OS
+.DS_Store
