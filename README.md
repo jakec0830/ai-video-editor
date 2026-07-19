@@ -125,7 +125,7 @@ pip install faster-whisper   # Windows / Intel Mac / Linux 用這個
 
 卡住或出現你看不懂的錯誤，直接跟 AI 說「回報問題」。它會把發生什麼、完整錯誤、你的電腦環境整理成一份報告，存在 `錯誤回報/` 資料夾裡。接著加入頭家校院 LINE 官方帳號 **@headhomeuni**（連結：https://lin.ee/oozBXeG），把那個檔案傳過去，訊息寫：
 
-> 呼叫Jake, 我的影片剪輯有錯誤，報告在這邊謝謝
+> 呼叫Jake, 我的影片剪輯skill有錯誤，報告在這邊謝謝
 
 Jake 看報告就能幫你修，不用你自己解。
 
