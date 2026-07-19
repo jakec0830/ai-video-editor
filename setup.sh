@@ -80,6 +80,12 @@ else
   echo "        安裝: curl -fsSL https://static.heygen.ai/cli/install.sh | bash   再: heygen auth login --oauth"
 fi
 
+# --- 4. 首次建立個人偏好檔（從範本複製，之後不進 git，更新才不會蓋掉）---
+if [ ! -f "$KIT/我的剪輯偏好.md" ] && [ -f "$KIT/我的剪輯偏好.範本.md" ]; then
+  cp "$KIT/我的剪輯偏好.範本.md" "$KIT/我的剪輯偏好.md"
+  echo "$OK 建立個人偏好檔：我的剪輯偏好.md"
+fi
+
 echo ""
 echo "=== 完成 ==="
 echo "用 Claude Code(或 Codex)打開這個資料夾,ai-edit 技能會自動載入。"

@@ -21,5 +21,8 @@ node_modules/
 錯誤回報/*
 !錯誤回報/.gitkeep
 
+# 學員個人偏好檔（setup.sh 從 我的剪輯偏好.範本.md 複製，本機自己維護，更新才不會被蓋掉）
+我的剪輯偏好.md
+
 # OS
 .DS_Store
