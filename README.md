@@ -125,3 +125,10 @@ Clawd 是 Anthropic（Claude 的公司）的官方吉祥物。課堂 demo 用沒
 - `setup.sh` — 一鍵安裝
 - `cleanup.sh` — 清理工作檔
 - `PIPELINE-NOTES.md` — 完整技術筆記（進階參考，一般用不到）
+
+## 授權與致謝
+
+- 這個工具包整體採 **MIT 授權**（見 `LICENSE`）。Copyright (c) 2026 Jake, 頭家校院。你可以自由使用、修改、散布。
+- `tools/freecut/` 底下的剪接／轉逐字稿腳本改編自開源專案 **video-use**（browser-use 團隊，MIT 授權）。原始授權保留在 `tools/freecut/LICENSE`，Copyright (c) 2026 Browser Use。感謝他們。
+- 其中 `helpers/xref_silence.py` 跟 `helpers/split_blobs.py` 是這個工具包原創（抓 Whisper 時間軸出錯用的波形工具），一樣走 MIT。
+- 字幕／特效用的 **HyperFrames**（heygen 團隊）透過 `npx hyperframes` 呼叫官方發布版，本工具包沒有夾帶它的原始碼。
