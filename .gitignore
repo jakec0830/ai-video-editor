@@ -1,4 +1,4 @@
-# Python env (rebuilt per-machine by setup.sh — never commit)
+# Python 環境（每台機器由 setup.sh 重建 — 絕不 commit）
 tools/freecut/.venv/
 **/__pycache__/
 *.pyc
@@ -6,12 +6,16 @@ tools/freecut/.venv/
 # Node
 node_modules/
 
-# Student working files (their videos + renders, not part of the kit)
-**/edit/
-**/renders/
-**/*.mp4
-**/*.mov
-**/*.MOV
+# 學員自己的影片專案跟中間檔（不屬於工具包）
+我的影片/*/
+**/工作檔/
+
+# 學員丟進素材庫的實際檔案（保留資料夾結構跟說明，不收檔案）
+素材庫/背景音樂/*
+素材庫/音效/*
+素材庫/b-roll/*
+素材庫/圖片/*
+!素材庫/**/.gitkeep
 
 # OS
 .DS_Store

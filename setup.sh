@@ -1,86 +1,86 @@
 #!/usr/bin/env bash
-# ai-edit-kit setup — builds the local Python env and checks external tools.
-# Mac / Linux / WSL / Git-Bash. Windows users without bash: see README "手動安裝".
+# ai-edit-kit 安裝 — 建立本機 Python 環境並檢查外部工具。
+# Mac / Linux / WSL / Git-Bash 適用。Windows 沒 bash 的話,見 README「手動安裝」。
 set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
 FREECUT="$KIT/tools/freecut"
 OK="[OK] "; WARN="[!]  "; ERR="[X]  "
 
-echo "=== ai-edit-kit setup ==="
-echo "kit root: $KIT"
+echo "=== ai-edit 工具包 安裝 ==="
+echo "工具包位置: $KIT"
 echo ""
 
-# --- 1. Python venv + deps -------------------------------------------------
+# --- 1. Python 環境 + 套件 --------------------------------------------------
 PY3="$(command -v python3 || true)"
 if [ -z "$PY3" ]; then
-  echo "$ERR python3 not found. Install Python 3.10+ first, then re-run."
+  echo "$ERR 找不到 python3。先裝 Python 3.10 以上,再重跑一次。"
   exit 1
 fi
 echo "$OK python3: $($PY3 --version)"
 
 if [ ! -d "$FREECUT/.venv" ]; then
-  echo "   creating venv at tools/freecut/.venv ..."
+  echo "   建立 Python 環境 (tools/freecut/.venv) ..."
   "$PY3" -m venv "$FREECUT/.venv"
 fi
 VPY="$FREECUT/.venv/bin/python3"
-[ -f "$VPY" ] || VPY="$FREECUT/.venv/Scripts/python.exe"   # Windows layout
+[ -f "$VPY" ] || VPY="$FREECUT/.venv/Scripts/python.exe"   # Windows 路徑
 "$VPY" -m pip install -q --upgrade pip >/dev/null 2>&1
 
-echo "   installing core deps (requests, librosa, matplotlib, pillow, numpy) ..."
+echo "   安裝核心套件 (requests, librosa, matplotlib, pillow, numpy) ..."
 "$VPY" -m pip install -q requests librosa matplotlib pillow numpy
 
-# --- 2. Whisper backend by platform ---------------------------------------
+# --- 2. 依平台裝 Whisper 引擎 -----------------------------------------------
 UNAME="$(uname -s 2>/dev/null || echo unknown)"
 ARCH="$(uname -m 2>/dev/null || echo unknown)"
 if [ "$UNAME" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
-  echo "   Apple Silicon detected → installing mlx-whisper (fastest) ..."
-  "$VPY" -m pip install -q mlx-whisper && echo "$OK mlx-whisper installed"
+  echo "   偵測到 Apple Silicon → 安裝 mlx-whisper(最快) ..."
+  "$VPY" -m pip install -q mlx-whisper && echo "$OK mlx-whisper 已安裝"
 else
-  echo "   $UNAME/$ARCH → installing faster-whisper (CPU/NVIDIA, cross-platform) ..."
-  "$VPY" -m pip install -q faster-whisper && echo "$OK faster-whisper installed"
+  echo "   $UNAME/$ARCH → 安裝 faster-whisper(CPU/NVIDIA,跨平台) ..."
+  "$VPY" -m pip install -q faster-whisper && echo "$OK faster-whisper 已安裝"
 fi
 
-# --- 3. External tools (check, don't force) --------------------------------
+# --- 3. 外部工具(只檢查,不強裝)-------------------------------------------
 echo ""
-echo "--- external tools ---"
+echo "--- 外部工具 ---"
 if command -v ffmpeg >/dev/null 2>&1; then
   echo "$OK ffmpeg: $(ffmpeg -version | head -1 | cut -d' ' -f1-3)"
 else
-  echo "$ERR ffmpeg missing. Mac: brew install ffmpeg | Windows: choco install ffmpeg | Linux: apt install ffmpeg"
+  echo "$ERR 缺 ffmpeg。 Mac: brew install ffmpeg | Windows: choco install ffmpeg | Linux: apt install ffmpeg"
 fi
 
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR="$(node --version | sed 's/v//' | cut -d. -f1)"
   if [ "$NODE_MAJOR" -ge 22 ] 2>/dev/null; then
-    echo "$OK node: $(node --version) (npx hyperframes ready)"
+    echo "$OK node: $(node --version)(npx hyperframes 可用)"
   else
-    echo "$WARN node $(node --version) is < 22. npx hyperframes needs Node >= 22. Update Node."
+    echo "$WARN node $(node --version) 版本太舊。 npx hyperframes 需要 Node 22 以上,請更新。"
   fi
 else
-  echo "$ERR node missing (needed for captions/FX via npx hyperframes). Install Node >= 22 from nodejs.org"
+  echo "$ERR 缺 node(字幕／特效要用 npx hyperframes)。到 nodejs.org 裝 Node 22 以上"
 fi
 
-# font (Source Han Serif / 思源宋體)
+# 字型(思源宋體 / Source Han Serif)
 if fc-list 2>/dev/null | grep -qi "Source Han Serif" || ls "$HOME/Library/Fonts/SourceHanSerif"* >/dev/null 2>&1; then
-  echo "$OK font: Source Han Serif (思源宋體) found"
+  echo "$OK 字型: 思源宋體(Source Han Serif)有裝"
 else
-  echo "$WARN font 思源宋體 (Source Han Serif VF) not found. Mac: brew install --cask font-source-han-serif-vf"
-  echo "        Others: download from github.com/adobe-fonts/source-han-serif/releases and install the .otf.ttc"
+  echo "$WARN 找不到思源宋體(Source Han Serif VF)。 Mac: brew install --cask font-source-han-serif-vf"
+  echo "        其他系統: 到 github.com/adobe-fonts/source-han-serif/releases 下載 .otf.ttc 安裝"
 fi
 
-# heygen (optional — SFX/BGM catalog)
+# heygen(選配 — 音效／背景音樂資料庫)
 if command -v heygen >/dev/null 2>&1; then
   if heygen auth status >/dev/null 2>&1; then
-    echo "$OK heygen CLI installed + logged in (SFX/BGM catalog ready)"
+    echo "$OK heygen CLI 已裝 + 已登入(音效／音樂資料庫可用)"
   else
-    echo "$WARN heygen CLI installed but not logged in. Run: heygen auth login --oauth"
+    echo "$WARN heygen CLI 有裝但沒登入。 執行: heygen auth login --oauth"
   fi
 else
-  echo "$WARN heygen CLI not installed (OPTIONAL — only for SFX/BGM catalog)."
-  echo "        Install: curl -fsSL https://static.heygen.ai/cli/install.sh | bash   then: heygen auth login --oauth"
+  echo "$WARN heygen CLI 沒裝(選配 — 只有要用音效／音樂資料庫才需要)。"
+  echo "        安裝: curl -fsSL https://static.heygen.ai/cli/install.sh | bash   再: heygen auth login --oauth"
 fi
 
 echo ""
-echo "=== done ==="
-echo "Open this folder in Claude Code (or Codex) and the ai-edit skill loads automatically."
-echo "Then drop in a video and say what you want. See README.md."
+echo "=== 完成 ==="
+echo "用 Claude Code(或 Codex)打開這個資料夾,ai-edit 技能會自動載入。"
+echo "然後把影片丟進來,說你想怎麼剪。詳見 README.md。"

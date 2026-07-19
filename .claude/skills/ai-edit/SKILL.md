@@ -1,56 +1,98 @@
 ---
 name: ai-edit
-description: Edit a talking-head video end to end by conversation - transcribe locally, cut retakes and pauses, add styled Traditional Chinese captions, visual effects, sound effects, and BGM, then render a final MP4. Use when the user drops in raw footage and wants an edited short-form video. Covers the full pipeline (local Whisper cut layer + HyperFrames caption/FX layer) including the ground-truth tools that keep Whisper's timing lies from breaking cuts.
+description: 用對話幫使用者從頭到尾剪一支口播影片 — 本機轉逐字稿、剪掉 NG 跟停頓、上繁體中文字幕、加特效音效背景音樂,最後輸出成品 MP4。當使用者丟進口播原始影片說要剪片時使用。涵蓋完整流程(本機 Whisper 剪接層 + HyperFrames 字幕特效層),包含避免 Whisper 時間軸出錯的驗證工具。也管理使用者的素材庫跟剪輯偏好。
 ---
 
-# ai-edit — AI 剪輯 pipeline (student kit)
+# ai-edit — AI 剪輯流程
 
-Agent-portable: any coding agent with shell + file tools (Claude Code, Codex, Cursor) can follow this. Commands are plain shell. **All paths are relative to the KIT ROOT** (the folder containing this kit — where `setup.sh`, `tools/`, and `PIPELINE-NOTES.md` live). If your working directory is elsewhere, resolve `KIT` to that folder first. Deep reference: `PIPELINE-NOTES.md` at the kit root.
+這份給 AI 讀。任何有終端機 + 檔案工具的 coding agent(Claude Code、Codex、Cursor)都能照著做。指令是純 shell,程式碼、路徑、技術名詞保留原文,說明用繁體中文。
 
-"Ask the user" = use whatever question mechanism your harness has; if fully autonomous, pick sensible defaults and say so.
+**所有路徑相對於「工具包根目錄」**(有 `setup.sh`、`tools/`、`素材庫/`、`我的影片/` 的那層,以下叫 `KIT`)。深入技術參考見 `KIT/PIPELINE-NOTES.md`。
 
-## First-time setup — WALK THE USER THROUGH IT (don't just report)
+**適用範圍:** 這個流程是給「口播影片」的(有人對著鏡頭講話)。剪接靠語音逐字稿,所以沒有講話的素材(純空景配樂那種)這個流程剪不了。底層的 HyperFrames 其實能做更多類型(產品片、解說片、動態圖文等),想延伸的話用 `npx hyperframes` 直接做 — 但那不走這個技能。
 
-When a student says "help me set up" / "幫我安裝" / it's their first run, actively install the missing pieces for them, one at a time. Do NOT dump a checklist and leave.
+「問使用者」= 用你的介面能問就問;完全自動跑的話,選合理預設並在結尾說明。
 
-1. Run `bash setup.sh` from the kit root and read its output. It builds the Python venv + whisper backend automatically and marks each external tool `[OK]`, `[!]`, or `[X]`.
-2. For each `[X]` (missing) or `[!]` (needs attention), handle it interactively:
-   - Detect the platform (`uname -s` / `uname -m`). Pick the right install command.
-   - **Explain what you're about to install and why** (one line), then run it. In Claude Code it may prompt for permission — that's normal.
-   - Re-run `setup.sh` after each install to confirm it flipped to `[OK]` before moving on.
-3. Common installs by platform:
-   - ffmpeg — Mac `brew install ffmpeg` · Windows `choco install ffmpeg` (admin PowerShell) · Linux `sudo apt install ffmpeg`
-   - Node >= 22 — Mac `brew install node` · else nodejs.org installer
-   - Homebrew (Mac, if `brew` missing) — the official `curl ... install.sh | bash`; **this asks for the user's password — hand that step to them, you cannot type it**
-   - font 思源宋體 — Mac `brew install --cask font-source-han-serif-vf` · else download from github.com/adobe-fonts/source-han-serif and the user double-clicks to install
-   - heygen (optional) — `curl -fsSL https://static.heygen.ai/cli/install.sh | bash` then `heygen auth login --oauth` (**the OAuth login opens a browser and is the user's own account — hand it to them**)
+---
 
-**Hand back to the user (you cannot do these):** anything needing a password / sudo / admin prompt, any browser OAuth login, any GUI installer (especially Node/font on Windows). Say clearly "this next step is yours: <what and why>", wait, then continue. On Windows without bash, `setup.sh` won't run — walk them through the README "手動安裝" commands one at a time instead.
+## 開場:先讀偏好檔(學習循環的起點)
 
-**Bootstrap floor:** installing Claude Code itself + logging in is done BEFORE this skill can run (it's how they're talking to you). Never try to install Claude Code from here.
+每次開始前,先讀 `KIT/我的剪輯偏好.md`。裡面是這位使用者過去累積的習慣(字幕風格、愛用音樂、剪接節奏等)。照著它走,不要每次重問使用者已經講過的偏好。收尾時你會更新它(見文末)。
 
-**Transcription is cross-platform.** `transcribe.py` auto-detects `mlx-whisper` on Apple Silicon (fastest) or `faster-whisper` elsewhere (Windows / Intel / Linux, CPU or NVIDIA). Same models, same repeat-collapse behaviour — the xref/waveform ground-truth steps matter equally on both.
+---
 
-Shorthand once set up: the note below (`PY`, `H`) points at the built venv + helpers.
+## 第一次設定 — 帶著使用者一步一步裝,不要只列清單
 
-Shorthand for the rest of this file: `PY="$KIT/tools/freecut/.venv/bin/python3"` and `H="$KIT/tools/freecut/helpers"`.
+使用者說「幫我安裝」「幫我設定」或這是第一次跑時,主動一個一個幫他把缺的東西裝好。不要丟一份清單就走。學員是新手。
 
-## The pipeline
+1. 在 KIT 根目錄跑 `bash setup.sh`,讀它的輸出。它會自動建好 Python 環境 + whisper 引擎,並把每個外部工具標成 `[OK]`、`[!]`、`[X]`。
+2. 每個 `[X]`(缺)或 `[!]`(要處理)的,互動式處理:
+   - 判斷平台(`uname -s` / `uname -m`),挑對的安裝指令。
+   - **先用一句話說你要裝什麼、為什麼**,再跑。Claude Code 可能會跳權限確認,正常。
+   - 每裝完一個,再跑一次 `setup.sh` 確認變成 `[OK]` 再繼續。
+3. 常見安裝(依平台):
+   - ffmpeg — Mac `brew install ffmpeg` · Windows `choco install ffmpeg`(要系統管理員 PowerShell)· Linux `sudo apt install ffmpeg`
+   - Node >= 22 — Mac `brew install node` · 其他到 nodejs.org 下載安裝
+   - Homebrew(Mac,若沒 `brew`)— 官方 `curl ... install.sh | bash`;**會要輸入電腦密碼,這步交給使用者,你打不了密碼**
+   - 思源宋體 — Mac `brew install --cask font-source-han-serif-vf` · 其他到 github.com/adobe-fonts/source-han-serif 下載,使用者自己雙擊安裝
+   - heygen(選配)— `curl -fsSL https://static.heygen.ai/cli/install.sh | bash` 再 `heygen auth login --oauth`(**會開瀏覽器登入他自己的帳號,交給使用者**)
 
-Work in `<video_dir>/edit/` next to the source video.
+**這些你做不到,交回給使用者:** 任何要密碼／sudo／系統管理員權限的、任何瀏覽器 OAuth 登入的、任何要點視窗的圖形安裝(尤其 Windows 上的 Node／字型)。清楚說「這步換你做:要做什麼、為什麼」,等他做完再繼續。Windows 沒 bash 的話 `setup.sh` 跑不了,改照 README 的「手動安裝」一條一條帶。
 
-### 1. Transcribe + cross-reference (BEFORE any cut)
+**底線:** Claude Code 本身的安裝跟登入是在這個技能能跑之前就完成的(不然使用者沒辦法跟你講話)。永遠不要嘗試從這裡安裝 Claude Code。
 
-```bash
-$PY $H/transcribe.py <video> --backend whisper --language zh --edit-dir <video_dir>/edit
-$PY $H/xref_silence.py <video> <video_dir>/edit/transcripts/<name>.json
+**轉逐字稿是跨平台的。** `transcribe.py` 會自動判斷:Apple Silicon 用 `mlx-whisper`(最快),其他(Windows／Intel／Linux,CPU 或 NVIDIA)用 `faster-whisper`。同樣的模型、同樣會有重複字出錯的問題,所以下面的 xref／波形驗證步驟兩邊都一樣重要。
+
+設定好之後,下面簡寫:`PY="$KIT/tools/freecut/.venv/bin/python3"`、`H="$KIT/tools/freecut/helpers"`。
+
+---
+
+## 資料夾結構與清理 — 幫新手保持整齊
+
+**一支影片一個資料夾**,放在 `KIT/我的影片/` 底下。使用者開始時,建好這個結構並用一句話跟他說明:
+
+```
+KIT/我的影片/<專案名>/
+  <原始影片檔>        原檔,絕不動它
+  成品.mp4            完成的影片 — 他要的就這一個
+  工作檔/             其他全部丟這:逐字稿、edl.json、preview_v*、字幕專案、擷取的畫面、下載的音檔
 ```
 
-For every MERGE flag, run `$PY $H/split_blobs.py <video> <start> <end>` and show the user the real speech blobs BEFORE cutting. MERGE regions are where Whisper lies (repeated words collapse into one token; filler absorbs into word spans). Never fine-cut inside a flagged region from transcript timing alone.
+紀律(照做,他的硬碟才不會爆):
+- 每個中間檔都放 `工作檔/` 底下。絕不把 preview、render、擷取的 PNG、試聽的音檔散在最上層或旁邊的資料夾。
+- 舊的 preview 邊做邊刪 — 有了 `preview_v2` 就刪掉 `preview_v1`。只留最新的 preview + `edl.json`。
+- 擷取的畫面 PNG、試聽下載的音檔是用完即丟:看完馬上刪。
+- **一次工作結束時,主動問要不要清理:**「要不要幫你清一下工作檔?我會留下你的原始影片跟成品.mp4,清掉 工作檔/(大約 X MB)。」顯示大小,等他說好。**絕不刪原始影片或成品.mp4。**
+- 使用者說「清理」「太亂了」時,跑 `bash cleanup.sh <專案資料夾>`(安全 — 會先顯示要刪什麼並要你確認,而且只動 `工作檔/`)。
 
-### 2. Structural cut (pass 1 — from transcript)
+---
 
-Propose in plain language first: which take to keep, which retakes to drop, which pauses to trim (~300ms between phrases, not 130ms — too tight reads as jumpy). Wait for confirmation, then write `edit/edl.json`:
+## 素材庫與 b-roll — 建議循環
+
+`KIT/素材庫/` 是跨專案共用的可重複素材:`背景音樂/`、`音效/`、`b-roll/`、`圖片/`。詳見 `KIT/素材庫/說明.md`。
+
+- 剪片要用音樂／音效／圖片／b-roll 時,**先看素材庫有沒有現成的**,有就直接用,不要重新下載。
+- 使用者這次帶進來或下載了新的音樂／音效／圖片/b-roll,用完後**主動問**:「要不要把這個存進素材庫,下次可以重複用?」說要就幫他放進對的子資料夾。
+- **b-roll**(補充畫面)放 `素材庫/b-roll/`:空景、產品特寫、示範操作畫面,任何口播中間想切過去的畫面。剪片時遇到適合插 b-roll 的段落(例如講到某個具體東西),**主動提醒**:「這裡可以插一段畫面,你素材庫裡有沒有相關的?或想拍一段?」b-roll 用疊軌方式合成(跟字幕特效同一套機制:在主影片上方的 track 加一個 `<video>` 或 `<img>` 元素,設 `data-start`/`data-duration`,人聲繼續播)。
+
+---
+
+## 剪輯流程
+
+在 `<專案>/工作檔/` 裡作業(就是下面的 `--edit-dir`)。最後成品輸出到 `<專案>/成品.mp4`。
+
+### 1. 轉逐字稿 + 交叉比對(剪之前先做)
+
+```bash
+$PY $H/transcribe.py <影片> --backend whisper --language zh --edit-dir <專案>/工作檔
+$PY $H/xref_silence.py <影片> <專案>/工作檔/transcripts/<名稱>.json
+```
+
+每個 MERGE 標記,跑 `$PY $H/split_blobs.py <影片> <start> <end>`,在剪之前把真正的語音區塊show給使用者看。MERGE 區是 Whisper 出錯的地方(重複字被併成一個 token、贅字被吃進字的時間裡)。絕不在被標記的區域裡只憑逐字稿時間做細剪。
+
+### 2. 結構剪接(第一輪 — 依逐字稿)
+
+先用白話提案:哪個 take 留、哪些 NG／重拍刪、哪些停頓修短(相鄰句子間留約 300ms,不是 130ms — 太緊會像很躁)。等使用者確認,再寫 `工作檔/edl.json`:
 
 ```json
 {"version":1,"sources":{"NAME":"/abs/path.MOV"},
@@ -58,65 +100,73 @@ Propose in plain language first: which take to keep, which retakes to drop, whic
  "grade":"none","overlays":[],"subtitles":null,"total_duration_s":0}
 ```
 
-All range times are RAW SOURCE seconds. Render: `$PY $H/render.py edit/edl.json -o edit/preview_v1.mp4 --preview --no-subtitles`
+range 的時間全部用**原始影片的秒數**。輸出:`$PY $H/render.py 工作檔/edl.json -o 工作檔/preview_v1.mp4 --preview --no-subtitles`
 
-### 3. Fine cuts (pass 2 — user-driven, waveform ground truth)
+### 3. 細剪(第二輪 — 使用者主導,用波形當真相)
 
-For any correction the user reports:
-- `$PY $H/timeline_view.py <RAW video> <start> <end> --n-frames 20 -o wave.png` and show it — the user reads exact timestamps off the waveform axis.
-- Corrections given in RAW-source time (stable across re-edits). Output-timeline times drift on every cut change — never chain-offset old numbers.
-- You cannot hear audio. Word-content questions are settled by the user's ear or the waveform, not by re-running Whisper (bigger models don't fix repeat-collapse).
+使用者用耳朵聽 preview。任何要修的地方:
+- 跑 `$PY $H/timeline_view.py <原始影片> <start> <end> --n-frames 20 -o wave.png` 給他看 — 使用者從波形的時間軸讀出精確秒數。
+- 修正一律用**原始影片時間**(重剪也不會跑掉)。輸出時間軸的秒數每次重剪都會位移 — 絕不拿舊數字去加減offset。
+- 你聽不到聲音。字到底是什麼字,由使用者的耳朵或波形決定,不要重跑 Whisper(換大模型不會解決重複字問題)。
 
-### 4. Captions (HyperFrames light path — no matting)
+### 4. 字幕(HyperFrames 輕量路線 — 不做去背)
 
 ```bash
-mkdir <video_dir>/edit/captions && cd there
+mkdir <專案>/工作檔/captions && cd 進去
 npx hyperframes init . --non-interactive --video ../preview_vN.mp4
 ```
 
-Author `index.html` directly (scaffold + these rules):
-- Composition + video sized to the footage (vertical = 1080x1920; scaffold defaults to landscape — override)
-- `lang="zh-Hant"`, font `"Source Han Serif VF"` via `@font-face { src: local("Source Han Serif VF"); }`
-- Remap the word transcript onto the output timeline by walking the EDL (recompute from scratch after EVERY cut change — never incremental offsets)
-- Natural sentence-length phrase groups (8-10 chars). Show the group list as editable text for the user to re-break BEFORE rendering
-- Phrase-level boxes only, contiguous during continuous speech (no dead gaps). NO per-word karaoke highlight — Whisper word timing is not reliable enough
-- Every timed element: `class="clip"` + `data-start` + `data-duration` + `data-track-index`; one paused GSAP timeline on `window.__timelines["main"]`; deterministic only (no Math.random/Date.now/infinite repeats)
-- **`data-duration` = the ACTUAL ffprobe'd duration of the cut file, never the EDL sum** (loudnorm adds ~0.2s; the EDL number silently truncates the last word)
+直接寫 `index.html`(用它產生的骨架 + 這些規則):
+- 畫布 + 影片元素尺寸對齊素材(直式 = 1080x1920;骨架預設橫式 — 一定要改)
+- `lang="zh-Hant"`,字型 `"Source Han Serif VF"`,用 `@font-face { src: local("Source Han Serif VF"); }`
+- 把逐字稿的字對應到輸出時間軸,要走一遍 EDL 重算(每次剪接改動後**從頭重算**,絕不拿舊數字加減)
+- 分成自然的句子長度(8-10 字一組)。上字幕前把分組清單當文字給使用者看,讓他重新斷句
+- 只做句子層級的字幕框,連續講話時要接續不斷(不要有空掉的空檔)。**不做逐字 highlight** — Whisper 的逐字時間不夠準,量產會出包
+- 每個有時間的元素:`class="clip"` + `data-start` + `data-duration` + `data-track-index`;一條暫停的 GSAP timeline 掛在 `window.__timelines["main"]`;只能用確定性的動畫(不能用 Math.random／Date.now／無限重複)
+- **`data-duration` 用 ffprobe 實際量到的剪好檔案長度,絕不用 EDL 加總**(loudnorm 會多約 0.2 秒;用 EDL 數字會把最後一個字截掉)
 
-Always `npx hyperframes lint` after every edit → fix errors → then render. (Optional richer FX skills: `npx hyperframes skills update` pulls the official HyperFrames skills.)
+每次改完一定 `npx hyperframes lint` → 修掉 error → 才 render。(想要更多特效技能:`npx hyperframes skills update` 拉官方 HyperFrames 技能。)
 
-### 5. Effects (optional)
+### 5. 特效(選配)
 
-GSAP overlays in the same composition:
-- Gesture-synced FX placement is a VISUAL question: extract frames (`ffmpeg -ss T -i vid -vframes 1 f.png`), look at them, place the element where the hand/gesture is. The transcript can't tell you where a hand is or when a finger snaps.
-- Real brand assets over invented ones (user supplies anything the catalogs lack — catalog gaps are normal)
-- Finite repeats only, cubic easing, `overwrite:"auto"` on colliding tweens
+GSAP 疊層,跟字幕同一個 composition:
+- 對手勢／動作的特效,「放哪」「什麼時候」是**視覺問題**:擷取影格(`ffmpeg -ss T -i vid -vframes 1 f.png`)去看,把元素放在手／動作的位置。逐字稿沒辦法告訴你手在哪、手指什麼時候彈。
+- 用真的品牌素材,不要自己畫(catalog 沒有的使用者自己給 — 資料庫有缺是正常的)
+- 只用有限次重複、cubic easing,重疊的 tween 加 `overwrite:"auto"`
 
-### 6. Render for viewing
+### 6. 輸出來看
 
 ```bash
-npx hyperframes render --quality standard --output renders/out.mp4
+npx hyperframes render --quality standard --output <專案>/成品.mp4
 ```
 
-`--quality draft` outputs a codec ONLY for frame-extraction checks — it plays back broken in players. Anything the user watches must be `standard`. Verify output duration with ffprobe; extract 3-5 frames and actually look at them before saying it's done.
+`--quality draft` 輸出的 codec 只能給 AI 自己擷取影格檢查用 — 在播放器裡會播不完整。**任何要給使用者看的一定要 `standard`。** render 完用 ffprobe 確認長度;擷取 3-5 張影格自己看過,再跟使用者說做好了。
 
-### 7. Sound (SFX + BGM) — single ffmpeg pass, video copied
+### 7. 聲音(音效 + 背景音樂)— 一次 ffmpeg 混音,影片複製不重壓
 
-Search catalog (needs heygen auth): `heygen audio sounds list --type sound_effects --query "..." --min-score 0.4 --limit 6` (music: `--type music`). Download candidates and let the USER audition — semantic scores are not ears. Check levels with `ffmpeg -i f.mp3 -af volumedetect -f null -` and boost quiet files (a -18dB-peak SFX needs ~6x).
+搜資料庫(要 heygen 登入):`heygen audio sounds list --type sound_effects --query "..." --min-score 0.4 --limit 6`(音樂用 `--type music`)。下載幾個候選讓**使用者用耳朵挑** — 語意分數不是耳朵。用 `ffmpeg -i f.mp3 -af volumedetect -f null -` 看音量,太小聲的檔要放大(峰值 -18dB 的音效大概要 6 倍才聽得到)。
 
 ```bash
 ffmpeg -y -i video.mp4 -i sfx1.mp3 -i bgm.mp3 -filter_complex "
 [1:a]aformat=channel_layouts=stereo,volume=0.55,adelay=MS|MS[s1];
 [2:a]atrim=0:DUR,afade=t=in:st=0:d=0.9,afade=t=out:st=END:d=1.4,volume=0.2[bgm];
 [0:a][s1][bgm]amix=inputs=3:normalize=0[mix];[mix]alimiter=limit=0.97[aout]
-" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k out.mp4
+" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k <專案>/成品.mp4
 ```
 
-BGM ~0.15-0.25 volume (under speech); loop short tracks with `-stream_loop`. SFX timing from the output-timeline word timestamps.
+背景音樂音量約 0.15-0.25(壓在人聲下面);短的曲子用 `-stream_loop` 循環。音效時間點用輸出時間軸的字詞秒數。用完問使用者要不要存進素材庫(見上面建議循環)。
 
-## Interaction protocol (why the loop stays short)
+---
 
-1. Propose → confirm → execute → show → iterate. Never re-cut on a guess about audio content.
-2. User's ear = ground truth for sound; the waveform = shared pointing device; raw-source timestamps = shared coordinate system.
-3. When the user reports something you can't verify (a doubled word, an offbeat sync), investigate with tools (split_blobs, frame extraction) before changing numbers.
-4. Version outputs (`preview_v1..vN`), keep the EDL as source of truth, delete superseded renders as you go.
+## 收尾:更新偏好檔(學習循環的終點)
+
+一支影片做完後,把這次學到的關於這位使用者的東西寫進 `KIT/我的剪輯偏好.md` 的對應段落:字幕風格(字型、大小、位置)、愛用的音樂調性、剪接節奏習慣、常用的特效／品牌素材、任何他重複要求或明確不要的東西。簡短、具體、覆蓋掉「尚未記錄」。這樣下次一開場讀它,就越來越懂他。
+
+---
+
+## 互動原則(為什麼流程能又快又順)
+
+1. 提案 → 確認 → 執行 → 給他看 → 修。絕不憑對聲音內容的猜測就重剪。
+2. 使用者的耳朵 = 聲音的真相;波形 = 兩人共用的「指這裡」工具;原始影片時間 = 共用的座標系。
+3. 使用者回報你驗證不了的東西(某個字重複了、音效沒對上),先用工具查(split_blobs、擷取影格)再改數字。
+4. 輸出檔案編版本(`preview_v1..vN`),EDL 當唯一真相,舊 render 邊做邊刪。
