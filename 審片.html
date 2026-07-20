@@ -54,12 +54,16 @@
     font-weight: 700; font-size: 13px; padding: 3px 9px; border-radius: 6px;
   }
   .stamp-row .small { font-size: 12px; color: #8b93a3; }
-  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .pgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .pgroup .glabel { font-size: 11px; color: #6b7385; margin-right: 2px; }
+  .presets { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .pgroup { display: flex; align-items: flex-start; gap: 8px; }
+  .pgroup .glabel {
+    font-size: 11px; color: #6b7385; width: 34px; flex-shrink: 0;
+    text-align: right; padding-top: 5px; line-height: 1.3;
+  }
+  .pgroup .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip {
     font-size: 12px; background: #191f2b; border: 1px solid #2a3140; color: #cdd4e0;
-    padding: 4px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+    padding: 3px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; line-height: 1.6;
   }
   .chip:hover { background: #232b3b; border-color: #3a4456; }
   .compose-input { display: flex; gap: 8px; }
@@ -168,7 +172,7 @@
     ["運鏡", ["推進 zoom in", "拉遠 zoom out", "左平移", "右平移", "Ken Burns", "縮框吐槽"]],
     ["字幕", ["蓋到臉/主體", "位置往上", "位置往下", "錯字", "斷句改這", "這個字 highlight"]],
     ["特效", ["加圖卡", "插畫面 cutaway", "畫中畫 PiP", "特效拿掉"]],
-    ["音效/音樂", ["加音效", "配樂太大聲", "沒對到節拍"]],
+    ["聲音", ["加音效", "配樂太大聲", "沒對到節拍"]],
   ];
 
   const $ = (id) => document.getElementById(id);
@@ -200,13 +204,15 @@
       g.className = "pgroup";
       const gl = document.createElement("span");
       gl.className = "glabel"; gl.textContent = label;
-      g.appendChild(gl);
+      const cc = document.createElement("div");
+      cc.className = "chips";
       chips.forEach((c) => {
         const b = document.createElement("button");
         b.className = "chip"; b.type = "button"; b.textContent = c;
         b.addEventListener("click", () => insertChip(c));
-        g.appendChild(b);
+        cc.appendChild(b);
       });
+      g.appendChild(gl); g.appendChild(cc);
       wrap.appendChild(g);
     });
   }
