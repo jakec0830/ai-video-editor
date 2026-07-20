@@ -149,7 +149,10 @@ npx hyperframes init . --non-interactive --video ../preview_vN.mp4
 
 直接寫 `index.html`(用它產生的骨架 + 這些規則):
 - 畫布 + 影片元素尺寸對齊素材(直式 = 1080x1920;骨架預設橫式 — 一定要改)
-- `lang="zh-Hant"`,字型 `"Source Han Serif TC VF"`(繁中要用 **TC** 那個 family,不是 `"Source Han Serif VF"` — 那個名字不存在,會 fallback 成黑體/無襯線,字幕就跟你選的宋體不一致),用 `@font-face { font-family:"Source Han Serif TC VF"; src: local("Source Han Serif TC VF"); }`。**關鍵字 highlight 只換顏色(黃),字型跟整句一樣,不要換字型**
+- `lang="zh-Hant"`。**字幕字型給兩個預設,用中文名讓使用者選**(第一次問,選好記進偏好檔,之後不用再問):
+  - **宋體** — 有襯線、優雅、文青感 → font-family `"Source Han Serif TC VF"`(繁中一定要 **TC** 那個;`"Source Han Serif VF"` 這個 family 不存在,會 fallback 成黑體,字型就不一致)
+  - **黑體** — 無襯線、粗、有力、短影音最常見 → font-family `"PingFang TC"`,`font-weight:700`
+  兩個都用 `@font-face { font-family:"<家族名>"; src: local("<家族名>"); }`。**關鍵字 highlight 只換顏色(黃),字型跟整句一模一樣,絕不換字型**
 - 把逐字稿的字對應到輸出時間軸,要走一遍 EDL 重算(每次剪接改動後**從頭重算**,絕不拿舊數字加減)
 - 分成自然的句子長度(8-10 字一組)。上字幕前把分組清單當文字給使用者看,讓他重新斷句
 - 只做句子層級的字幕框,連續講話時要接續不斷(不要有空掉的空檔)。**不做逐字卡拉OK highlight**(每個字念到才變色)— Whisper 的逐字時間不夠準,量產會出包
