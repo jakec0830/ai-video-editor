@@ -3,6 +3,9 @@ tools/freecut/.venv/
 **/__pycache__/
 *.pyc
 
+# Windows 逐字稿獨立版 exe（~4GB，使用者自己下載，絕不 commit）
+tools/freecut/whisper-xxl/
+
 # Node
 node_modules/
 

@@ -66,18 +66,21 @@ claude
 # 5. 在裡面打：幫我一步一步安裝設定
 ```
 
-### 如果你想自己裝（Windows 或不想讓 AI 代勞）
+### 如果你想自己裝（不想讓 AI 代勞）
 
-Mac / Linux 可以直接在資料夾裡跑 `bash setup.sh`。Windows 沒有 bash 的話，照下面「手動安裝」做。
+一鍵安裝腳本：
 
-需要的東西一覽：
+- **Mac / Linux**：在資料夾裡跑 `bash setup.sh`。
+- **Windows**：在 PowerShell 裡跑 `powershell -ExecutionPolicy Bypass -File .\setup.ps1`。它會用 winget 幫你把 Python、Node、ffmpeg 都裝好，再裝字型、建環境。
 
-- **Node.js（22 以上）** — 字幕跟特效用。nodejs.org 下載。
-- **ffmpeg** — 影音核心。Mac `brew install ffmpeg`，Windows `choco install ffmpeg`，Linux `apt install ffmpeg`。
-- **思源宋體（Source Han Serif VF）** — 字幕字型。Mac `brew install --cask font-source-han-serif-vf`，其他系統到 github.com/adobe-fonts/source-han-serif 下載。
+需要的東西一覽（腳本都會幫你處理，這裡列給你知道）：
+
+- **Node.js（22 以上）** — 字幕跟特效用。Mac `brew`，Windows winget `OpenJS.NodeJS.LTS`，或 nodejs.org 下載。
+- **ffmpeg** — 影音核心。Mac `brew install ffmpeg`，Windows winget `Gyan.FFmpeg`，Linux `apt install ffmpeg`。
+- **思源宋體（Source Han Serif TC）** — 字幕字型。Mac `brew install --cask font-source-han-serif-vf`，Windows 跑 `scripts\windows\install-font.ps1`（`setup.ps1` 會自動叫它），Linux 到 github.com/adobe-fonts/source-han-serif 下載。
 - **heygen CLI（選配）** — 只有要用音效／背景音樂資料庫才需要。`curl -fsSL https://static.heygen.ai/cli/install.sh | bash`，再 `heygen auth login --oauth`。不裝就自己準備音檔丟進來。
 
-### 手動安裝（Windows 或 setup.sh 失敗時）
+### 手動安裝（腳本失敗時）
 
 ```
 # 1. 建 Python 環境（在 tools/freecut/ 底下）
@@ -86,14 +89,35 @@ python3 -m venv tools/freecut/.venv
 # 2. 啟動環境並裝套件
 #    Mac/Linux:  source tools/freecut/.venv/bin/activate
 #    Windows:    tools\freecut\.venv\Scripts\activate
-pip install requests pillow numpy
+pip install requests pillow numpy opencc-python-reimplemented
 
-# 3. 裝轉逐字稿引擎（二選一）
+# 3. 裝轉逐字稿引擎（看你的系統）
 pip install mlx-whisper      # 只有 Apple Silicon Mac 用這個（最快）
-pip install faster-whisper   # Windows / Intel Mac / Linux 用這個
+pip install faster-whisper   # Intel Mac / Linux 用這個
+#   Windows：見下面「Windows 疑難排解」，pip 版通常會被系統安全防護擋掉，
+#            要改用 Faster-Whisper-XXL 獨立版。
 ```
 
 其餘（Node、ffmpeg、字型、heygen）照上面裝。
+
+### Windows 疑難排解
+
+Windows 全新機器最容易撞到的兩個坑（都已知，照做即可）：
+
+**1. 逐字稿引擎被擋（最重要）。** 症狀：`pip install faster-whisper` 明明成功，但一用就出現
+「**應用程式控制原則已封鎖此檔案**」。原因是 Windows 11 內建的 **Smart App Control（智慧型應用程式控制）** 把 faster-whisper 依賴套件裡的未簽章 DLL 擋掉了。
+
+**不要為了這個去關掉 Smart App Control**（關掉是不可逆的，要重灌才能開回來）。正解是改用不會被擋的獨立版：
+
+1. 到 https://github.com/Purfview/whisper-standalone-win/releases 下載 **Faster-Whisper-XXL** 的 Windows 版。
+2. 解壓縮，把整個資料夾放進 `tools/whisper-xxl/`（裡面要有 `faster-whisper-xxl.exe`）。或設環境變數 `WHISPER_XXL_EXE` 指到那個 exe。
+3. 之後轉逐字稿會自動用它。它產出的是簡體字，工具包會用 OpenCC 自動轉成繁體（`setup` 已幫你裝 opencc）。
+
+注意這個獨立版比較大（下載約 1.4GB、解壓約 4.4GB），下載要等幾分鐘，屬正常。
+
+**2. Python 是「空殼」。** 全新 Windows 打 `python` 會跳出 Microsoft Store，那代表 Python 其實沒裝。用 `winget install Python.Python.3.12`（或 `setup.ps1`）裝好，把終端機關掉重開再重跑。
+
+**3. 終端機噴一堆 `UnicodeEncodeError` / `cp950`。** 這只是繁中主控台的顯示編碼問題，通常不代表安裝失敗，可忽略。想看清楚訊息就用 PowerShell 先跑 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` 再重試。
 
 ## 怎麼用
 
@@ -164,7 +188,9 @@ Clawd 是 Anthropic（Claude 的公司）的官方吉祥物。課堂 demo 用沒
 - `我的影片/` — 你的影片專案放這
 - `素材庫/` — 可重複用的音樂／音效／b-roll／圖片
 - `我的剪輯偏好.範本.md` — 偏好檔範本（setup.sh 會複製成你自己的 `我的剪輯偏好.md`，AI 用它記住你的習慣）
-- `setup.sh` — 一鍵安裝
+- `setup.sh` — 一鍵安裝（Mac / Linux）
+- `setup.ps1` — 一鍵安裝（Windows，用 winget）
+- `scripts/windows/install-font.ps1` — Windows 思源宋體安裝
 - `update.sh` — 更新到最新版
 - `cleanup.sh` — 清理工作檔
 - `PIPELINE-NOTES.md` — 完整技術筆記（進階參考，一般用不到）

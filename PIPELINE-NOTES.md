@@ -60,6 +60,17 @@ that path means re-cloning github.com/heygen-com/hyperframes + `bun install && b
    — editing a doc, not describing a video from memory.
 
 ## Environment facts
+- **Windows transcription: pip faster-whisper is blocked by Smart App Control.** On a fresh
+  Windows 11 machine, `pip install faster-whisper` "succeeds" but `import faster_whisper` dies
+  with 「應用程式控制原則已封鎖此檔案」 — Smart App Control blocks the unsigned FFmpeg DLLs that
+  the `av` (PyAV) dependency bundles with random-hash filenames. Do NOT disable Smart App Control
+  (irreversible without a Windows reinstall). Fix = the Purfview **Faster-Whisper-XXL** standalone
+  exe (bundles everything, no unsigned-DLL import, survives the block; verified on Win11 2026-07-20:
+  not blocked, ~real-time on CPU, good 繁中). `transcribe.py` has a `whisper_xxl` backend for it,
+  auto-selected on Windows; drop the exe in `tools/freecut/whisper-xxl/` or set `WHISPER_XXL_EXE`.
+  XXL output is Simplified even with `--language zh`, so the backend runs OpenCC `s2twp` to convert
+  to 繁體 (needs `pip install opencc`). Windows also needs `setup.ps1` (winget) + the font script,
+  because there is no brew equivalent; a Store-stub `python` fools naive detection.
 - Standard Homebrew ffmpeg has **no** libass/`subtitles` filter (official homebrew-core
   formula never enables it). This is why captions go through HyperFrames HTML overlay, not
   ffmpeg burn-in.
