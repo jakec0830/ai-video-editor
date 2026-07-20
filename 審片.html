@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>審片 — 影片註解</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #0f1216; color: #e6e9ef;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid #232833;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .5px; }
+  header .hint { font-size: 12px; color: #8b93a3; }
+  .filebtn {
+    font-size: 13px; background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef;
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .filebtn:hover { background: #232b3b; }
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* left: video */
+  .left { flex: 1.4; display: flex; flex-direction: column; min-width: 0; padding: 16px; gap: 12px; }
+  .stage {
+    flex: 1; min-height: 0; background: #000; border-radius: 12px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; position: relative;
+  }
+  .stage.empty { border: 2px dashed #2c3444; }
+  .stage .drop-hint { color: #6b7385; font-size: 14px; text-align: center; padding: 24px; }
+  video { max-width: 100%; max-height: 100%; display: none; }
+  video.loaded { display: block; }
+
+  .controls { display: flex; align-items: center; gap: 10px; }
+  .controls button {
+    background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef;
+    width: 40px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
+  .controls button:hover { background: #232b3b; }
+  .time { font-variant-numeric: tabular-nums; font-size: 13px; color: #aab2c2; min-width: 96px; }
+  input[type=range].scrub { flex: 1; accent-color: #f5c542; }
+
+  /* note composer */
+  .composer { border-top: 1px solid #232833; padding-top: 12px; }
+  .stamp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .stamp {
+    font-variant-numeric: tabular-nums; background: #f5c542; color: #1a1400;
+    font-weight: 700; font-size: 13px; padding: 3px 9px; border-radius: 6px;
+  }
+  .stamp-row .small { font-size: 12px; color: #8b93a3; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .pgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pgroup .glabel { font-size: 11px; color: #6b7385; margin-right: 2px; }
+  .chip {
+    font-size: 12px; background: #191f2b; border: 1px solid #2a3140; color: #cdd4e0;
+    padding: 4px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { background: #232b3b; border-color: #3a4456; }
+  .compose-input { display: flex; gap: 8px; }
+  textarea#note {
+    flex: 1; resize: none; height: 46px; background: #10151d; color: #e6e9ef;
+    border: 1px solid #2c3444; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px;
+  }
+  textarea#note:focus { outline: none; border-color: #f5c542; }
+  .addbtn {
+    background: #f5c542; color: #1a1400; border: none; border-radius: 8px;
+    padding: 0 16px; font-weight: 700; cursor: pointer; font-size: 14px;
+  }
+  .addbtn:disabled { opacity: .4; cursor: default; }
+
+  /* right: notes */
+  .right { flex: 1; border-left: 1px solid #232833; display: flex; flex-direction: column; min-width: 300px; }
+  .right .rhead {
+    padding: 12px 16px; border-bottom: 1px solid #232833;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .right .rhead .count { font-size: 13px; color: #aab2c2; }
+  .copybtn {
+    background: #2b7a4b; color: #eafff1; border: none; padding: 7px 14px;
+    border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px;
+  }
+  .copybtn:hover { background: #329055; }
+  .copybtn:disabled { opacity: .4; cursor: default; }
+  .notes { flex: 1; overflow-y: auto; padding: 8px; }
+  .note {
+    background: #141a24; border: 1px solid #222a38; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .note:hover { border-color: #3a4456; }
+  .note .nt { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .note .ntime { font-variant-numeric: tabular-nums; color: #f5c542; font-weight: 700; font-size: 13px; }
+  .note .del {
+    background: none; border: none; color: #6b7385; cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .note .del:hover { color: #ff7a7a; }
+  .note .ntext { font-size: 14px; line-height: 1.45; color: #dfe4ee; white-space: pre-wrap; }
+  .empty-notes { color: #6b7385; font-size: 13px; text-align: center; padding: 32px 16px; line-height: 1.6; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #2b7a4b; color: #eafff1; padding: 10px 18px; border-radius: 10px;
+    font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>審片</h1>
+    <button class="filebtn" id="pick">選擇影片檔</button>
+    <input type="file" id="file" accept="video/*" hidden />
+    <span class="hint">空白鍵 播放/暫停 · 在想改的地方暫停 → 打註解 → Enter 送出 · 全部改完按「複製全部」貼回 Claude</span>
+  </header>
+
+  <main>
+    <div class="left">
+      <div class="stage empty" id="stage">
+        <div class="drop-hint" id="drophint">把影片檔拖進來,或按上面「選擇影片檔」<br /><span style="font-size:12px;color:#565e6f">通常是 我的影片/你的專案/工作檔/preview_v*.mp4</span></div>
+        <video id="video" playsinline></video>
+      </div>
+
+      <div class="controls">
+        <button id="playpause" title="播放/暫停 (空白鍵)">▶</button>
+        <span class="time" id="timelabel">0:00 / 0:00</span>
+        <input type="range" class="scrub" id="scrub" min="0" max="1000" value="0" />
+      </div>
+
+      <div class="composer">
+        <div class="stamp-row">
+          <span class="stamp" id="stamp">0:00</span>
+          <span class="small" id="stamphint">← 這則註解會標在這個時間點(暫停或拖動時間軸來選)</span>
+        </div>
+        <div class="presets" id="presets"></div>
+        <div class="compose-input">
+          <textarea id="note" placeholder="打你想改的地方… 例如:這裡字幕蓋到臉 / 這段太鬆剪掉一點 / 這裡推進放大"></textarea>
+          <button class="addbtn" id="add" disabled>加註解</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="rhead">
+        <span class="count" id="count">0 則註解</span>
+        <button class="copybtn" id="copy" disabled>複製全部</button>
+      </div>
+      <div class="notes" id="notes">
+        <div class="empty-notes" id="emptynotes">還沒有註解。<br />在影片裡想改的地方暫停,打字說要怎麼改,按 Enter。</div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // 輕量預設語彙塊 — 點一下把詞插進註解框,你還是可以自由改字。
+  // 這些詞對應 ai-edit 技能的工具箱,講出來 AI 就懂。
+  const PRESETS = [
+    ["剪接", ["太緊·剪太多", "太鬆·留太多", "這段刪掉", "接不順"]],
+    ["運鏡", ["推進 zoom in", "拉遠 zoom out", "左平移", "右平移", "Ken Burns", "縮框吐槽"]],
+    ["字幕", ["蓋到臉/主體", "位置往上", "位置往下", "錯字", "斷句改這", "這個字 highlight"]],
+    ["特效", ["加圖卡", "插畫面 cutaway", "畫中畫 PiP", "特效拿掉"]],
+    ["音效/音樂", ["加音效", "配樂太大聲", "沒對到節拍"]],
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const video = $("video"), stage = $("stage"), drophint = $("drophint");
+  const scrub = $("scrub"), timelabel = $("timelabel"), playpause = $("playpause");
+  const stamp = $("stamp"), noteBox = $("note"), addBtn = $("add");
+  const notesEl = $("notes"), emptyNotes = $("emptynotes"), countEl = $("count"), copyBtn = $("copy");
+  const toast = $("toast");
+
+  let notes = [];
+  let fileName = "";
+  let frozen = null;      // 開始打字時凍結的時間點;null = 跟著播放頭
+  let storageKey = "";
+
+  // ---- 時間格式 ----
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+    const base = mm + ":" + String(s).padStart(2, "0");
+    return h > 0 ? h + ":" + base : base;
+  }
+
+  // ---- 預設塊 ----
+  function buildPresets() {
+    const wrap = $("presets");
+    PRESETS.forEach(([label, chips]) => {
+      const g = document.createElement("div");
+      g.className = "pgroup";
+      const gl = document.createElement("span");
+      gl.className = "glabel"; gl.textContent = label;
+      g.appendChild(gl);
+      chips.forEach((c) => {
+        const b = document.createElement("button");
+        b.className = "chip"; b.type = "button"; b.textContent = c;
+        b.addEventListener("click", () => insertChip(c));
+        g.appendChild(b);
+      });
+      wrap.appendChild(g);
+    });
+  }
+  function insertChip(text) {
+    // 點塊 = 凍結目前時間點 + 把詞加到註解框
+    if (frozen === null) frozen = video.currentTime || 0;
+    const cur = noteBox.value.trim();
+    noteBox.value = cur ? cur + " " + text : text;
+    noteBox.focus();
+    refreshStamp();
+    refreshAddBtn();
+  }
+
+  // ---- 影片載入 ----
+  function loadFile(file) {
+    if (!file) return;
+    fileName = file.name;
+    storageKey = "審片註解:" + fileName;
+    video.src = URL.createObjectURL(file);
+    video.classList.add("loaded");
+    stage.classList.remove("empty");
+    drophint.style.display = "none";
+    // 同名檔案的舊註解自動帶回(手滑重整不會全丟)
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      notes = Array.isArray(saved) ? saved : [];
+    } catch (e) { notes = []; }
+    renderNotes();
+  }
+
+  $("pick").addEventListener("click", () => $("file").click());
+  $("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+  ["dragover", "drop"].forEach((ev) =>
+    stage.addEventListener(ev, (e) => { e.preventDefault(); })
+  );
+  stage.addEventListener("drop", (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f && f.type.startsWith("video")) loadFile(f);
+  });
+
+  // ---- 播放控制 ----
+  function togglePlay() {
+    if (!video.src) return;
+    if (video.paused) video.play(); else video.pause();
+  }
+  playpause.addEventListener("click", togglePlay);
+  video.addEventListener("play", () => { playpause.textContent = "❚❚"; });
+  video.addEventListener("pause", () => { playpause.textContent = "▶"; });
+  video.addEventListener("timeupdate", () => {
+    if (video.duration) scrub.value = String((video.currentTime / video.duration) * 1000);
+    timelabel.textContent = fmt(video.currentTime) + " / " + fmt(video.duration);
+    refreshStamp();
+  });
+  scrub.addEventListener("input", () => {
+    if (video.duration) video.currentTime = (scrub.value / 1000) * video.duration;
+  });
+
+  function refreshStamp() {
+    const t = frozen !== null ? frozen : (video.currentTime || 0);
+    stamp.textContent = fmt(t);
+  }
+
+  // ---- 打註解 ----
+  noteBox.addEventListener("focus", () => {
+    if (frozen === null) frozen = video.currentTime || 0;
+    refreshStamp();
+  });
+  noteBox.addEventListener("input", refreshAddBtn);
+  function refreshAddBtn() { addBtn.disabled = !video.src || noteBox.value.trim() === ""; }
+
+  function addNote() {
+    const text = noteBox.value.trim();
+    if (!text || !video.src) return;
+    const t = frozen !== null ? frozen : (video.currentTime || 0);
+    notes.push({ id: Date.now() + Math.random(), t: t, text: text });
+    notes.sort((a, b) => a.t - b.t);
+    noteBox.value = "";
+    frozen = null;
+    refreshStamp();
+    refreshAddBtn();
+    renderNotes();
+    showToast("已加註解 @ " + fmt(t));
+  }
+  addBtn.addEventListener("click", addNote);
+  noteBox.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addNote(); }
+  });
+
+  // 空白鍵播放/暫停(在打字時不要攔截)
+  document.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "INPUT") {
+      e.preventDefault(); togglePlay();
+    }
+  });
+
+  // ---- 註解列表 ----
+  function renderNotes() {
+    save();
+    countEl.textContent = notes.length + " 則註解";
+    copyBtn.disabled = notes.length === 0;
+    notesEl.querySelectorAll(".note").forEach((n) => n.remove());
+    emptyNotes.style.display = notes.length ? "none" : "block";
+    notes.forEach((n) => {
+      const el = document.createElement("div");
+      el.className = "note";
+      el.addEventListener("click", (e) => {
+        if (e.target.classList.contains("del")) return;
+        if (video.src) { video.currentTime = n.t; }
+      });
+      const top = document.createElement("div");
+      top.className = "nt";
+      const tm = document.createElement("span");
+      tm.className = "ntime"; tm.textContent = fmt(n.t);
+      const del = document.createElement("button");
+      del.className = "del"; del.textContent = "×"; del.title = "刪除";
+      del.addEventListener("click", () => {
+        notes = notes.filter((x) => x.id !== n.id); renderNotes();
+      });
+      top.appendChild(tm); top.appendChild(del);
+      const txt = document.createElement("div");
+      txt.className = "ntext"; txt.textContent = n.text;
+      el.appendChild(top); el.appendChild(txt);
+      notesEl.appendChild(el);
+    });
+  }
+
+  function save() {
+    if (storageKey) { try { localStorage.setItem(storageKey, JSON.stringify(notes)); } catch (e) {} }
+  }
+
+  // ---- 複製全部 ----
+  function buildExport() {
+    const lines = [];
+    lines.push("影片審片註解");
+    lines.push("影片檔:" + (fileName || "(未命名)"));
+    lines.push("共 " + notes.length + " 則,依時間排序");
+    lines.push("");
+    notes.forEach((n) => { lines.push("[" + fmt(n.t) + "] " + n.text); });
+    lines.push("");
+    lines.push("(以上每一則,請在對應時間點修改。時間是這支預覽片的時間軸;");
+    lines.push(" 遇到剪接類的『太緊/太鬆/刪掉』,用 EDL 把預覽時間對回原始影片再調。)");
+    return lines.join("\n");
+  }
+  copyBtn.addEventListener("click", async () => {
+    const text = buildExport();
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("已複製 " + notes.length + " 則,貼回 Claude 就好");
+    } catch (e) {
+      // clipboard 被擋 → 退而求其次:下載成 txt
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "審片註解.txt"; a.click();
+      showToast("剪貼簿被擋,已改成下載 審片註解.txt");
+    }
+  });
+
+  let toastTimer = null;
+  function showToast(msg) {
+    toast.textContent = msg; toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
+  }
+
+  buildPresets();
+  refreshStamp();
+})();
+</script>
+</body>
+</html>
