@@ -111,6 +111,17 @@
     font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
   }
   .toast.show { opacity: 1; }
+
+  /* V2: pen (draw on the frame) + annotated notes */
+  #pen { position: absolute; z-index: 6; pointer-events: none; touch-action: none; }
+  #pen.active { pointer-events: auto; cursor: crosshair; }
+  .controls button.on { background: #f5c542; color: #1a1400; border-color: #f5c542; }
+  .controls .wbtn { width: auto; padding: 0 12px; font-size: 13px; }
+  .cuthint { font-size: 11px; color: #6b7385; margin: -2px 0 10px; line-height: 1.5; }
+  .rhead .rbtns { display: flex; gap: 8px; align-items: center; }
+  .imgbtn { background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .imgbtn:hover { background: #232b3b; }
+  .note .nthumb { display: block; margin-top: 8px; max-width: 100%; border-radius: 8px; border: 1px solid #2a3140; }
 </style>
 </head>
 <body>
@@ -126,19 +137,25 @@
       <div class="stage empty" id="stage">
         <div class="drop-hint" id="drophint">把影片檔拖進來,或按上面「選擇影片檔」<br /><span style="font-size:12px;color:#565e6f">通常是 我的影片/你的專案/工作檔/preview_v*.mp4</span></div>
         <video id="video" playsinline></video>
+        <canvas id="pen"></canvas>
       </div>
 
       <div class="controls">
         <button id="playpause" title="播放/暫停 (空白鍵)">▶</button>
         <span class="time" id="timelabel">0:00 / 0:00</span>
         <input type="range" class="scrub" id="scrub" min="0" max="1000" value="0" />
+        <button id="penToggle" class="wbtn" title="在畫面上畫記(標位置)">✎ 畫筆</button>
+        <button id="penClear" class="wbtn" title="清掉目前的畫記">清除</button>
       </div>
     </div>
 
     <div class="right">
       <div class="rhead">
         <span class="count" id="count">0 則註解</span>
-        <button class="copybtn" id="copy" disabled>複製全部</button>
+        <div class="rbtns">
+          <button class="imgbtn" id="dlimg" style="display:none">下載畫記圖</button>
+          <button class="copybtn" id="copy" disabled>複製全部</button>
+        </div>
       </div>
 
       <div class="composer">
@@ -147,6 +164,7 @@
           <span class="small" id="stamphint">← 註解會標在這個時間點(暫停/拖時間軸來選)</span>
         </div>
         <div class="presets" id="presets"></div>
+        <div class="cuthint">剪接類(太緊/太鬆/NG):講出你聽到的字,AI 比較好定位 · 要標位置就開「畫筆」在畫面上圈</div>
         <div class="compose-input">
           <textarea id="note" placeholder="打你想改的地方… 例如:這裡字幕蓋到臉 / 這段太鬆剪掉一點 / 這裡推進放大"></textarea>
           <button class="addbtn" id="add" disabled>加註解</button>
@@ -181,11 +199,13 @@
   const stamp = $("stamp"), noteBox = $("note"), addBtn = $("add");
   const notesEl = $("notes"), emptyNotes = $("emptynotes"), countEl = $("count"), copyBtn = $("copy");
   const toast = $("toast");
+  const penCanvas = $("pen"), pctx = penCanvas.getContext("2d"), dlimg = $("dlimg");
 
   let notes = [];
   let fileName = "";
   let frozen = null;      // 開始打字時凍結的時間點;null = 跟著播放頭
   let storageKey = "";
+  let penMode = false, drawing = false, hasStrokes = false;
 
   // ---- 時間格式 ----
   function fmt(sec) {
@@ -270,6 +290,64 @@
     if (video.duration) video.currentTime = (scrub.value / 1000) * video.duration;
   });
 
+  // ---- 畫筆(在畫面上標位置)----
+  function setPenStyle() {
+    pctx.lineWidth = 4; pctx.lineCap = "round"; pctx.lineJoin = "round";
+    pctx.strokeStyle = "#ff3b3b";
+  }
+  function fitPen() {
+    // 把畫布疊到「影片實際顯示的那塊」上,尺寸要對齊才不會畫歪
+    if (!video.src) return;
+    const vr = video.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    penCanvas.style.left = (vr.left - sr.left) + "px";
+    penCanvas.style.top = (vr.top - sr.top) + "px";
+    penCanvas.style.width = vr.width + "px";
+    penCanvas.style.height = vr.height + "px";
+    const w = Math.max(1, Math.round(vr.width)), h = Math.max(1, Math.round(vr.height));
+    if (penCanvas.width !== w || penCanvas.height !== h) {
+      penCanvas.width = w; penCanvas.height = h; hasStrokes = false;  // 改尺寸會清空
+    }
+    setPenStyle();
+  }
+  function clearPen() { pctx.clearRect(0, 0, penCanvas.width, penCanvas.height); hasStrokes = false; }
+  function captureAnnotated() {
+    // 把「當下這格影片 + 紅筆畫記」合成一張圖(顯示解析度就夠 AI 看位置)
+    const c = document.createElement("canvas");
+    c.width = penCanvas.width; c.height = penCanvas.height;
+    const cx = c.getContext("2d");
+    try { cx.drawImage(video, 0, 0, c.width, c.height); } catch (e) {}
+    cx.drawImage(penCanvas, 0, 0);
+    return c.toDataURL("image/png");
+  }
+
+  $("penToggle").addEventListener("click", () => {
+    penMode = !penMode;
+    penCanvas.classList.toggle("active", penMode);
+    $("penToggle").classList.toggle("on", penMode);
+    if (penMode) { if (!video.paused) video.pause(); fitPen(); }
+  });
+  $("penClear").addEventListener("click", clearPen);
+
+  penCanvas.addEventListener("pointerdown", (e) => {
+    if (!penMode) return;
+    drawing = true; hasStrokes = true;
+    if (frozen === null) frozen = video.currentTime || 0;  // 一開始畫就凍結時間點
+    refreshStamp();
+    const r = penCanvas.getBoundingClientRect();
+    pctx.beginPath(); pctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+    penCanvas.setPointerCapture(e.pointerId);
+  });
+  penCanvas.addEventListener("pointermove", (e) => {
+    if (!drawing) return;
+    const r = penCanvas.getBoundingClientRect();
+    pctx.lineTo(e.clientX - r.left, e.clientY - r.top); pctx.stroke();
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((ev) =>
+    penCanvas.addEventListener(ev, () => { drawing = false; refreshAddBtn(); }));
+
+  video.addEventListener("loadedmetadata", fitPen);
+  window.addEventListener("resize", fitPen);
+
   function refreshStamp() {
     const t = frozen !== null ? frozen : (video.currentTime || 0);
     stamp.textContent = fmt(t);
@@ -281,20 +359,27 @@
     refreshStamp();
   });
   noteBox.addEventListener("input", refreshAddBtn);
-  function refreshAddBtn() { addBtn.disabled = !video.src || noteBox.value.trim() === ""; }
+  function refreshAddBtn() {
+    // 有畫記也算可送(可以只畫不打字)
+    addBtn.disabled = !video.src || (noteBox.value.trim() === "" && !hasStrokes);
+  }
 
   function addNote() {
-    const text = noteBox.value.trim();
-    if (!text || !video.src) return;
+    if (!video.src) return;
+    let text = noteBox.value.trim();
+    if (!text && !hasStrokes) return;
+    if (!text) text = "(見畫記)";
     const t = frozen !== null ? frozen : (video.currentTime || 0);
-    notes.push({ id: Date.now() + Math.random(), t: t, text: text });
+    const note = { id: Date.now() + Math.random(), t: t, text: text };
+    if (hasStrokes) { note.img = captureAnnotated(); clearPen(); }
+    notes.push(note);
     notes.sort((a, b) => a.t - b.t);
     noteBox.value = "";
     frozen = null;
     refreshStamp();
     refreshAddBtn();
     renderNotes();
-    showToast("已加註解 @ " + fmt(t));
+    showToast("已加註解 @ " + fmt(t) + (note.img ? "(含畫記)" : ""));
   }
   addBtn.addEventListener("click", addNote);
   noteBox.addEventListener("keydown", (e) => {
@@ -313,6 +398,7 @@
     save();
     countEl.textContent = notes.length + " 則註解";
     copyBtn.disabled = notes.length === 0;
+    dlimg.style.display = notes.some((n) => n.img) ? "inline-block" : "none";
     notesEl.querySelectorAll(".note").forEach((n) => n.remove());
     emptyNotes.style.display = notes.length ? "none" : "block";
     notes.forEach((n) => {
@@ -335,13 +421,34 @@
       const txt = document.createElement("div");
       txt.className = "ntext"; txt.textContent = n.text;
       el.appendChild(top); el.appendChild(txt);
+      if (n.img) {
+        const im = document.createElement("img");
+        im.className = "nthumb"; im.src = n.img; im.alt = "畫記";
+        el.appendChild(im);
+      }
       notesEl.appendChild(el);
     });
   }
 
+  // localStorage 只存文字(畫記圖太大會爆配額);圖是這次工作階段用,重整就沒了。
   function save() {
-    if (storageKey) { try { localStorage.setItem(storageKey, JSON.stringify(notes)); } catch (e) {} }
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(
+        notes.map((n) => ({ id: n.id, t: n.t, text: n.text }))));
+    } catch (e) {}
   }
+
+  // ---- 下載畫記圖(瀏覽器不能直接寫進資料夾,先落到「下載」)----
+  function imgName(t) { return "審片-" + fmt(t).replace(/:/g, "-") + ".png"; }
+  dlimg.addEventListener("click", () => {
+    const drawn = notes.filter((n) => n.img);
+    drawn.forEach((n, i) => setTimeout(() => {
+      const a = document.createElement("a");
+      a.href = n.img; a.download = imgName(n.t); a.click();
+    }, i * 250));  // 錯開一點,瀏覽器才不會吃掉連續下載
+    showToast("下載 " + drawn.length + " 張畫記圖到你的「下載」資料夾");
+  });
 
   // ---- 複製全部 ----
   function buildExport() {
@@ -350,10 +457,17 @@
     lines.push("影片檔:" + (fileName || "(未命名)"));
     lines.push("共 " + notes.length + " 則,依時間排序");
     lines.push("");
-    notes.forEach((n) => { lines.push("[" + fmt(n.t) + "] " + n.text); });
+    notes.forEach((n) => {
+      let line = "[" + fmt(n.t) + "] " + n.text;
+      if (n.img) line += "(附畫記圖 " + imgName(n.t) + ",紅筆是位置)";
+      lines.push(line);
+    });
     lines.push("");
     lines.push("(以上每一則,請在對應時間點修改。時間是這支預覽片的時間軸;");
     lines.push(" 遇到剪接類的『太緊/太鬆/刪掉』,用 EDL 把預覽時間對回原始影片再調。)");
+    if (notes.some((n) => n.img)) {
+      lines.push("(有『附畫記圖』的:我按了「下載畫記圖」,圖在下載資料夾,請一起看。)");
+    }
     return lines.join("\n");
   }
   copyBtn.addEventListener("click", async () => {
