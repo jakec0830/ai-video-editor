@@ -63,8 +63,11 @@ that path means re-cloning github.com/heygen-com/hyperframes + `bun install && b
 - Standard Homebrew ffmpeg has **no** libass/`subtitles` filter (official homebrew-core
   formula never enables it). This is why captions go through HyperFrames HTML overlay, not
   ffmpeg burn-in.
-- Font 思源宋體 = "Source Han Serif VF" (Adobe official, `brew install --cask
-  font-source-han-serif-vf`); reference in CSS as `local("Source Han Serif VF")` +
-  `@font-face`, and set `lang="zh-Hant"` on the composition for correct TC glyphs.
+- Font 思源宋體 (Adobe official, `brew install --cask font-source-han-serif-vf`).
+  The installed families are region-suffixed (TC/SC/HC/K/J) — there is NO plain
+  "Source Han Serif VF" family, so for 繁中 use **`"Source Han Serif TC VF"`** in
+  CSS (`local("Source Han Serif TC VF")` + `@font-face`). Using the plain name
+  silently falls back to a sans font (verified via fc-list 2026-07-20). Set
+  `lang="zh-Hant"` on the composition for correct TC glyphs.
 - HyperFrames caption composition must be 1080x1920 (vertical); the scaffold defaults to
   1920x1080 landscape — always override.
