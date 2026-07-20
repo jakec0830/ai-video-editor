@@ -153,7 +153,7 @@ npx hyperframes init . --non-interactive --video ../preview_vN.mp4
   - **宋體** — 有襯線、優雅、文青感 → font-family `"Source Han Serif TC VF"`(繁中一定要 **TC** 那個;`"Source Han Serif VF"` 這個 family 不存在,會 fallback 成黑體,字型就不一致)
   - **黑體** — 無襯線、粗、有力、短影音最常見 → font-family `"PingFang TC"`,`font-weight:700`
   兩個都用 `@font-face { font-family:"<家族名>"; src: local("<家族名>"); }`。**關鍵字 highlight 只換顏色(黃),字型跟整句一模一樣,絕不換字型**
-- 把逐字稿的字對應到輸出時間軸,要走一遍 EDL 重算(每次剪接改動後**從頭重算**,絕不拿舊數字加減)
+- 把逐字稿的字對應到輸出時間軸,**用 `$PY $H/edl_to_captions.py <transcript.json> <edl.json> -o captions.json`**(它做完 EDL 重算、英文碎片合併、單調時間夾緊、斷句分組;`--fixes fixes.json` 帶入使用者的常見錯字字典 — 從偏好檔讀)。每次剪接改動後**從頭重跑**,絕不拿舊數字加減。跑完你只做判斷層:修錯字、調斷句、挑 highlight 關鍵字
 - 分成自然的句子長度(8-10 字一組)。上字幕前把分組清單當文字給使用者看,讓他重新斷句
 - 只做句子層級的字幕框,連續講話時要接續不斷(不要有空掉的空檔)。**不做逐字卡拉OK highlight**(每個字念到才變色)— Whisper 的逐字時間不夠準,量產會出包
 - **可以做「關鍵字 highlight」**(跟卡拉OK不同,是安全的):整句出現的期間,把節奏提案挑到的 1-2 個關鍵字塗黃,靜態、整句在就一直黃、不隨字念變色,所以不需要逐字時間。**依提案的用量上限,整支只在 2-3 個最有力的點用,不是每句**
@@ -237,6 +237,8 @@ ffmpeg -y -i video.mp4 -i sfx1.mp3 -i bgm.mp3 -filter_complex "
 [0:a][s1][bgm]amix=inputs=3:normalize=0[mix];[mix]alimiter=limit=0.97[aout]
 " -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k <專案>/成品.mp4
 ```
+
+**只有 BGM、沒有音效時,直接用 `bash $H/finalize.sh <render.mp4> <bgm.mp3> <專案>/成品.mp4 [音量]`** — 它自動循環 BGM 蓋滿全片、進出 fade、限幅,影片流複製不重壓(~1 秒)。有音效要疊才用上面的完整 filter_complex。**每次重 render 後都要重跑混音**(混音只存在輸出檔,不在 hyperframes 專案裡)。
 
 背景音樂音量約 0.15-0.25(壓在人聲下面);短的曲子用 `-stream_loop` 循環。音效時間點用輸出時間軸的字詞秒數。用完問使用者要不要存進素材庫(見上面建議循環)。
 
