@@ -131,6 +131,8 @@
   .rhead .rbtns { display: flex; gap: 8px; align-items: center; }
   .imgbtn { background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
   .imgbtn:hover { background: #232b3b; }
+  .imgbtn:disabled { opacity: .4; cursor: default; }
+  .imgbtn:disabled:hover { background: #1c2230; }
   .note .nthumb { display: block; margin-top: 8px; max-width: 100%; border-radius: 8px; border: 1px solid #2a3140; }
 
   /* subtitle track — clickable lines, active line highlighted, dblclick to edit */
@@ -243,6 +245,7 @@
       <div class="rhead">
         <span class="count" id="count">0 則註解</span>
         <div class="rbtns">
+          <button class="imgbtn" id="undoBtn" disabled title="退回上一步改動(改字/斷句/併句/加註解/刪註解/剪接)">↺ 上一步<kbd>⌘Z</kbd></button>
           <button class="imgbtn" id="dlimg" style="display:none">下載畫記圖</button>
           <button class="copybtn" id="copy" disabled>複製全部</button>
         </div>
@@ -385,14 +388,18 @@
     return false;
   }
 
-  // ---- 上一步(Ctrl+Z):改字/斷句/併句/加註解/刪註解 都能退 ----
+  // ---- 上一步(按鈕 + Ctrl+Z):改字/斷句/併句/加註解/刪註解 都能退 ----
   const undoStack = [];
+  const undoBtn = $("undoBtn");
+  function refreshUndoBtn() { undoBtn.disabled = undoStack.length === 0; }
   function pushUndo() {
     undoStack.push(JSON.stringify({ subs: subs, notes: notes.map((n) => ({...n})) }));
     if (undoStack.length > 30) undoStack.shift();
+    refreshUndoBtn();
   }
   function undo() {
     const snap = undoStack.pop();
+    refreshUndoBtn();
     if (!snap) { showToast("沒有可以退的步驟了"); return; }
     try {
       const s = JSON.parse(snap);
@@ -402,6 +409,7 @@
       showToast("已退回上一步");
     } catch (e) {}
   }
+  undoBtn.addEventListener("click", undo);
 
   function mergeLine(i) {
     // 併下句:i 跟 i+1 合成一句(時間取頭尾)
