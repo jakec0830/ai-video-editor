@@ -36,11 +36,19 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 $deps = @(
   @{ Name = "Python 3.12"; Id = "Python.Python.3.12";  Probe = "python" },
   @{ Name = "Node.js LTS"; Id = "OpenJS.NodeJS.LTS";    Probe = "node"   },
-  @{ Name = "ffmpeg";      Id = "Gyan.FFmpeg";          Probe = "ffmpeg" }
+  @{ Name = "ffmpeg";      Id = "Gyan.FFmpeg";          Probe = "ffmpeg" },
+  # VC++ 執行階段:CTranslate2 這類含 C 擴充的套件常需要。實測機器上有裝
+  # (雖然當時是誤判裝的),保險起見一起裝 — 已裝過 winget 會自己跳過。
+  @{ Name = "VC++ Redistributable"; Id = "Microsoft.VCRedist.2015+.x64"; Probe = $null;
+     RegProbe = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" }
 )
 Write-Host "--- 系統工具(winget)---"
+Refresh-Path   # 先重讀 PATH:重跑 setup 時,上次裝好的工具才偵測得到(不然會誤判成沒裝)
 foreach ($d in $deps) {
-  if (Get-Command $d.Probe -ErrorAction SilentlyContinue) {
+  $installed = $false
+  if ($d.Probe -and (Get-Command $d.Probe -ErrorAction SilentlyContinue)) { $installed = $true }
+  if ($d.RegProbe -and (Test-Path $d.RegProbe)) { $installed = $true }
+  if ($installed) {
     Write-Host "[OK] $($d.Name) 已安裝"
     continue
   }

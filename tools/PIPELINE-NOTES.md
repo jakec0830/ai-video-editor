@@ -60,6 +60,12 @@ that path means re-cloning github.com/heygen-com/hyperframes + `bun install && b
    — editing a doc, not describing a video from memory.
 
 ## Environment facts
+- **Every .ps1 in this repo MUST be UTF-8 *with BOM* (file starts with EF BB BF).** Windows
+  PowerShell 5.1 — the built-in edition on every student machine (not pwsh) — parses a BOM-less
+  .ps1 with the system codepage (Big5/cp950 on 繁中 systems), so the Chinese strings garble and
+  the parser dies before printing anything. This killed setup.ps1 entirely in real Win11 testing
+  (2026-07-20 report §7.1). If you edit setup.ps1 / scripts/windows/*.ps1, verify afterward:
+  `xxd setup.ps1 | head -1` must start with `efbb bf`. Editors and agents can silently strip it.
 - **Windows transcription: pip faster-whisper is blocked by Smart App Control.** On a fresh
   Windows 11 machine, `pip install faster-whisper` "succeeds" but `import faster_whisper` dies
   with 「應用程式控制原則已封鎖此檔案」 — Smart App Control blocks the unsigned FFmpeg DLLs that
