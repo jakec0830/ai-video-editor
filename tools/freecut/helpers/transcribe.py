@@ -17,8 +17,15 @@ The output shape is fixed and consumed downstream by pack_transcripts.py:
 
 Backends:
     whisper     — DEFAULT. Local, free. Uses mlx-whisper on Apple Silicon if
-                  available, otherwise faster-whisper. Single speaker (no
-                  diarization) — every word gets speaker_id "speaker_0".
+                  available, else faster-whisper (pip), else the whisper_xxl
+                  standalone exe if it's installed (the Windows fallback).
+                  Single speaker (no diarization) — every word is "speaker_0".
+    whisper_xxl — Purfview's Faster-Whisper-XXL standalone exe (no Python deps,
+                  no unsigned DLLs — survives Windows Smart App Control, which
+                  blocks the pip faster-whisper). Output is Simplified Chinese,
+                  so this path converts to 繁體 via OpenCC (s2twp) when opencc
+                  is installed. Locate the exe via WHISPER_XXL_EXE, PATH, or a
+                  bundled tools/whisper-xxl/ folder.
     vibevoice   — Calls an HTTP endpoint (env VIBEVOICE_ASR_URL) that serves
                   the microsoft/VibeVoice-ASR model. Multi-speaker diarization.
     elevenlabs  — Original ElevenLabs Scribe path. Needs ELEVENLABS_API_KEY.
@@ -49,6 +56,9 @@ import requests
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 DEFAULT_BACKEND = "whisper"
 DEFAULT_WHISPER_MODEL = "small"
+# The XXL standalone is fast enough on CPU (near real-time) that we default it
+# to a bigger model than the pip path for better 繁中 accuracy.
+DEFAULT_WHISPER_XXL_MODEL = "medium"
 
 
 # ---------------------------------------------------------------------------
@@ -225,13 +235,156 @@ def transcribe_whisper(
                     "speaker_id": "speaker_0",
                 })
 
+    elif _find_whisper_xxl():
+        # Windows fallback: pip faster-whisper is blocked by Smart App Control,
+        # but the standalone exe is not. Delegate to it. Bump the default model
+        # up for accuracy since the exe is near real-time even on CPU.
+        xxl_model = DEFAULT_WHISPER_XXL_MODEL if model == DEFAULT_WHISPER_MODEL else model
+        return transcribe_whisper_xxl(audio_path, model=xxl_model, language=language)
+
     else:
         sys.exit(
             "whisper backend needs one of:\n"
             "  pip install mlx-whisper       # Apple Silicon (recommended)\n"
-            "  pip install faster-whisper    # NVIDIA / CPU fallback"
+            "  pip install faster-whisper    # NVIDIA / CPU fallback\n"
+            "  Faster-Whisper-XXL standalone # Windows (Smart App Control safe)\n"
+            "    → https://github.com/Purfview/whisper-standalone-win/releases\n"
+            "    unzip into tools/whisper-xxl/ or set WHISPER_XXL_EXE"
         )
 
+    return {"words": _interleave_spacing(word_entries)}
+
+
+# ---------------------------------------------------------------------------
+# Backend: whisper_xxl (Purfview standalone exe — the Windows fallback)
+# ---------------------------------------------------------------------------
+
+def _find_whisper_xxl() -> str | None:
+    """Locate the Purfview Faster-Whisper-XXL executable.
+
+    Search order: WHISPER_XXL_EXE env/.env → PATH → a bundled
+    tools/whisper-xxl/ folder next to the freecut checkout.
+    """
+    import shutil
+
+    override = _env("WHISPER_XXL_EXE")
+    if override and Path(override).exists():
+        return override
+
+    for name in (
+        "faster-whisper-xxl", "faster-whisper-xxl.exe",
+        "whisper-faster-xxl", "whisper-faster-xxl.exe",
+    ):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    freecut = Path(__file__).resolve().parent.parent  # tools/freecut
+    search_roots = [freecut / "whisper-xxl", freecut.parent / "whisper-xxl"]
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for name in ("faster-whisper-xxl.exe", "faster-whisper-xxl"):
+            hits = list(root.rglob(name))
+            if hits:
+                return str(hits[0])
+    return None
+
+
+def _to_traditional(text: str) -> str:
+    """Convert Simplified → Traditional (Taiwan) Chinese via OpenCC.
+
+    The XXL exe emits Simplified even with --language zh. If opencc isn't
+    installed we leave the text untouched rather than fail the transcription.
+    """
+    if not text:
+        return text
+    try:
+        from opencc import OpenCC
+        # s2twp: Simplified → Traditional with Taiwan idioms/variants.
+        return OpenCC("s2twp").convert(text)
+    except Exception:
+        return text
+
+
+def transcribe_whisper_xxl(
+    audio_path: Path,
+    model: str = DEFAULT_WHISPER_XXL_MODEL,
+    language: str | None = None,
+    exe: str | None = None,
+) -> dict:
+    """Transcribe via the Purfview Faster-Whisper-XXL standalone exe.
+
+    Runs the exe with JSON output + word timestamps, parses its segments into
+    the normalized {"words": [...]} shape, and converts Simplified → 繁體.
+
+    NOTE: exact flag names follow the whisper/faster-whisper CLI convention the
+    standalone inherits. If a future XXL release renames a flag, confirm with
+    `faster-whisper-xxl.exe --help` and adjust here.
+    """
+    exe = exe or _find_whisper_xxl()
+    if not exe:
+        sys.exit(
+            "whisper_xxl backend: could not find the Faster-Whisper-XXL exe.\n"
+            "  Download: https://github.com/Purfview/whisper-standalone-win/releases\n"
+            "  Unzip into tools/whisper-xxl/ or set WHISPER_XXL_EXE to the exe path."
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        cmd = [
+            exe, str(audio_path),
+            "--model", model,
+            "--language", language or "zh",
+            "--word_timestamps", "True",
+            "--output_format", "json",
+            "--output_dir", str(out_dir),
+        ]
+        subprocess.run(cmd, check=True)
+
+        jsons = list(out_dir.glob("*.json"))
+        if not jsons:
+            raise RuntimeError(
+                f"whisper_xxl produced no JSON in {out_dir}. "
+                "Check the exe ran and --output_format json is supported."
+            )
+        data = json.loads(jsons[0].read_text(encoding="utf-8"))
+
+    word_entries: list[dict] = []
+    for seg in data.get("segments", []) or []:
+        words = seg.get("words") or []
+        if words:
+            for w in words:
+                text = (w.get("word") or w.get("text") or "").strip()
+                if not text:
+                    continue
+                word_entries.append({
+                    "type": "word",
+                    "text": _to_traditional(text),
+                    "start": float(w.get("start", seg.get("start", 0.0))),
+                    "end": float(w.get("end", seg.get("end", 0.0))),
+                    "speaker_id": "speaker_0",
+                })
+        else:
+            # No word-level timing: interpolate across the segment text.
+            text = (seg.get("text") or "").strip()
+            if not text:
+                continue
+            seg_start = float(seg.get("start", 0.0))
+            seg_end = float(seg.get("end", seg_start))
+            tokens = list(text)  # CJK: split per character
+            span = max(seg_end - seg_start, 1e-3)
+            per = span / len(tokens)
+            for i, tok in enumerate(tokens):
+                word_entries.append({
+                    "type": "word",
+                    "text": _to_traditional(tok),
+                    "start": seg_start + i * per,
+                    "end": seg_start + (i + 1) * per,
+                    "speaker_id": "speaker_0",
+                })
+
+    word_entries.sort(key=lambda w: w["start"])
     return {"words": _interleave_spacing(word_entries)}
 
 
@@ -388,6 +541,9 @@ def _run_backend(
 ) -> dict:
     if backend == "whisper":
         return transcribe_whisper(audio, model=whisper_model, language=language)
+    if backend == "whisper_xxl":
+        xxl_model = DEFAULT_WHISPER_XXL_MODEL if whisper_model == DEFAULT_WHISPER_MODEL else whisper_model
+        return transcribe_whisper_xxl(audio, model=xxl_model, language=language)
     if backend == "vibevoice":
         return transcribe_vibevoice(audio, url=vibevoice_url, language=language)
     if backend == "elevenlabs":
@@ -475,7 +631,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--backend",
-        choices=["whisper", "vibevoice", "elevenlabs"],
+        choices=["whisper", "whisper_xxl", "vibevoice", "elevenlabs"],
         default=DEFAULT_BACKEND,
         help=f"Transcription backend (default: {DEFAULT_BACKEND}).",
     )

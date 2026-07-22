@@ -21,9 +21,11 @@ Usage:
         --video preview_v7.mp4 --w 1080 --h 1920 --duration 84.63 \
         --font 宋體 -o index.html
 
-Fonts (two presets — pick by 中文 name):
-    宋體  → "Source Han Serif TC VF"  (襯線, 文青; 繁中一定要 TC)
-    黑體  → "PingFang TC" weight 700   (無襯線, 短影音最常見)
+Fonts (two presets — pick by 中文 name). Each lists BOTH platform families:
+    宋體  → "Source Han Serif TC VF" (Mac 裝的 VF 變數字型) +
+            "Source Han Serif TC"    (Windows 裝的靜態子集,family 沒 VF)
+            兩個名字都列才能跨平台不出包;繁中一定要 TC。
+    黑體  → "PingFang TC" (Mac) + "Microsoft JhengHei" (Windows 正黑體), weight 700
 """
 
 from __future__ import annotations
@@ -35,8 +37,8 @@ import sys
 from pathlib import Path
 
 FONTS = {
-    "宋體": {"family": "Source Han Serif TC VF", "weight": 600, "src": 'local("Source Han Serif TC VF")'},
-    "黑體": {"family": "PingFang TC", "weight": 700, "src": 'local("PingFang TC")'},
+    "宋體": {"families": ["Source Han Serif TC VF", "Source Han Serif TC"], "weight": 600},
+    "黑體": {"families": ["PingFang TC", "Microsoft JhengHei"], "weight": 700},
 }
 
 
@@ -52,7 +54,13 @@ def hl_html(text: str, hl: str | None) -> str:
 def build(captions: list[dict], video: str, w: int, h: int,
           duration: float, font_key: str) -> str:
     f = FONTS[font_key]
-    fam = f["family"]
+    # 每個平台家族各一條 @font-face(宣告本身就能擋 renderer fallback 成通用字型),
+    # font-family 全部列上 — 哪個平台裝了哪個,瀏覽器自己挑得到。
+    font_faces = "\n".join(
+        f'      @font-face {{ font-family:"{fam}"; src: local("{fam}"); }}'
+        for fam in f["families"]
+    )
+    fam_stack = ", ".join(f'"{fam}"' for fam in f["families"])
 
     subs = []
     for i, c in enumerate(captions):
@@ -73,7 +81,7 @@ def build(captions: list[dict], video: str, w: int, h: int,
     <style>
       /* @font-face is REQUIRED even for a system font — the declaration alone
          stops the renderer falling back to a generic face. */
-      @font-face {{ font-family:"{fam}"; src: {f["src"]}; }}
+{font_faces}
       * {{ margin:0; padding:0; box-sizing:border-box; }}
       html, body {{ width:{w}px; height:{h}px; overflow:hidden; background:#000; }}
       #root {{ position:absolute; inset:0; }}
@@ -83,7 +91,7 @@ def build(captions: list[dict], video: str, w: int, h: int,
       .sub {{
         position:absolute; left:50%; bottom:230px; transform:translateX(-50%);
         width:auto; max-width:{int(w*0.86)}px; text-align:center; z-index:20;
-        font-family:"{fam}",sans-serif; font-weight:{f["weight"]};
+        font-family:{fam_stack},sans-serif; font-weight:{f["weight"]};
         font-size:56px; line-height:1.32; color:#fff; white-space:nowrap;
       }}
       .sub-inner {{
