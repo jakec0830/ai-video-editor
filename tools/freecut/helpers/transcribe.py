@@ -252,6 +252,14 @@ def transcribe_whisper(
             "    unzip into tools/whisper-xxl/ or set WHISPER_XXL_EXE"
         )
 
+    # 簡轉繁是「這個 backend 用的模型碰巧輸出簡體」的共用問題,不是只有 XXL 會遇到 —
+    # pip 版 faster-whisper 對 zh 預設也常吐簡體。要求 language=="zh" 才轉,才不會
+    # 誤動到其他語言;所有子分支(mlx / faster-whisper)都要走到這裡才 return,
+    # 只有 whisper_xxl 分支是自己內部處理後 early return(見上面),所以蓋得到全部。
+    if language == "zh":
+        for w in word_entries:
+            w["text"] = _to_traditional(w["text"])
+
     return {"words": _interleave_spacing(word_entries)}
 
 

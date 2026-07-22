@@ -1,4 +1,4 @@
-<#
+﻿<#
   install-font.ps1 — 在 Windows 上安裝思源宋體(Source Han Serif TC)給目前使用者。
 
   Mac 用 brew 一行搞定,Windows 沒有對應套件,只能下載 + 註冊。這支腳本把

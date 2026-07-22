@@ -74,7 +74,9 @@ elif [ "$IS_WINDOWS" = "1" ]; then
   else
     echo "$WARN faster-whisper 裝了但無法載入(多半是 Windows Smart App Control"
     echo "        擋掉未簽章 DLL:「應用程式控制原則已封鎖此檔案」)。"
-    echo "        改用 Faster-Whisper-XXL 獨立版(不會被擋),請手動下載:"
+    echo "        這個封鎖有時候幾小時後會自己解除(雲端信譽評分重新判定),"
+    echo "        不急的話可以先重開機或晚點重跑一次 setup 試試,說不定就通了。"
+    echo "        還是被擋的話,改用 Faster-Whisper-XXL 獨立版(不會被擋),請手動下載:"
     echo "        1. https://github.com/Purfview/whisper-standalone-win/releases"
     echo "        2. 下載 Faster-Whisper-XXL 的 Windows 版,解壓縮"
     echo "        3. 把整個資料夾放到 tools/whisper-xxl/(裡面要有 faster-whisper-xxl.exe)"

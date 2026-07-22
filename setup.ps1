@@ -1,4 +1,4 @@
-<#
+﻿<#
   setup.ps1 — Windows 一鍵安裝(對應 Mac 的 setup.sh)。
 
   全新 Windows 沒有 bash,也沒有 brew,所以這支用 winget 把系統層工具裝好,
@@ -45,7 +45,12 @@ foreach ($d in $deps) {
     continue
   }
   Write-Host "   安裝 $($d.Name) ..."
-  winget install --id $d.Id -e --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+  # 故意不吞 winget 的輸出(不接 Out-Null)— 如果之後又有人回報「明明裝過還在重裝」,
+  # 這裡的原始輸出跟 exit code 能幫忙判斷是腳本判斷錯,還是 winget/環境本身的問題。
+  winget install --id $d.Id -e --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "[!] winget 裝 $($d.Name) 回報了非 0 結束碼($LASTEXITCODE),可能已經裝過或裝失敗,請看上面的輸出。"
+  }
 }
 Refresh-Path
 
@@ -87,7 +92,9 @@ if ($LASTEXITCODE -eq 0) {
   Write-Host "[OK] faster-whisper 已安裝且可用"
 } else {
   Write-Host "[!] faster-whisper 裝了但無法載入(多半是 Smart App Control 擋未簽章 DLL:"
-  Write-Host "    「應用程式控制原則已封鎖此檔案」)。改用 Faster-Whisper-XXL 獨立版:"
+  Write-Host "    「應用程式控制原則已封鎖此檔案」)。這個封鎖有時候幾小時後會自己解除,"
+  Write-Host "    不急的話可以先重開機或晚點重跑一次 setup.ps1 試試。還是被擋的話,"
+  Write-Host "    改用 Faster-Whisper-XXL 獨立版:"
   Write-Host "    1. https://github.com/Purfview/whisper-standalone-win/releases"
   Write-Host "    2. 下載 Faster-Whisper-XXL 的 Windows 版,解壓縮"
   Write-Host "    3. 整個資料夾放到 tools\whisper-xxl\(裡面要有 faster-whisper-xxl.exe)"
