@@ -245,7 +245,7 @@
       <div class="rhead">
         <span class="count" id="count">0 則註解</span>
         <div class="rbtns">
-          <button class="imgbtn" id="undoBtn" disabled title="退回上一步改動(改字/斷句/併句/加註解/刪註解/剪接)">↺ 上一步<kbd>⌘Z</kbd></button>
+          <button class="imgbtn" id="undoBtn" disabled title="退回上一步改動(改字/斷句/併句/加註解/刪註解/剪接)">↺ 上一步<kbd id="undoKey">Ctrl+Z</kbd></button>
           <button class="imgbtn" id="dlimg" style="display:none">下載畫記圖</button>
           <button class="copybtn" id="copy" disabled>複製全部</button>
         </div>
@@ -410,6 +410,10 @@
     } catch (e) {}
   }
   undoBtn.addEventListener("click", undo);
+  // 按鍵標籤依系統顯示:Mac 顯示 ⌘Z,其他(Windows/Linux)顯示 Ctrl+Z
+  if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "")) {
+    $("undoKey").textContent = "⌘Z";
+  }
 
   function mergeLine(i) {
     // 併下句:i 跟 i+1 合成一句(時間取頭尾)
