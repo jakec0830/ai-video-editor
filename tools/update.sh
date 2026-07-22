@@ -21,6 +21,11 @@ else
   echo "有 $BEHIND 個更新，拉下來 ..."
   if git -C "$KIT" pull --quiet; then
     echo "更新完成。你的影片、素材、偏好都還在。"
+    echo ""
+    echo "重要：這只更新了檔案，還沒重新檢查套件。請接著跑一次安裝檢查："
+    echo "  Mac/Linux: bash \"$KIT/setup.sh\""
+    echo "  Windows:   powershell -ExecutionPolicy Bypass -File \"$KIT\\setup.ps1\""
+    echo "（已經裝好的東西會直接跳過，不會重裝或壞掉，只補這次更新新增的部分。）"
   else
     echo "更新沒成功（可能你改動到工具包內建的檔案）。跟 AI 說「回報問題」產一份報告傳給 Jake。"
   fi
