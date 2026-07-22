@@ -81,12 +81,30 @@ else
 fi
 
 # --- 4. 首次建立個人偏好檔（從範本複製，之後不進 git，更新才不會蓋掉）---
-if [ ! -f "$KIT/我的剪輯偏好.md" ] && [ -f "$KIT/我的剪輯偏好.範本.md" ]; then
-  cp "$KIT/我的剪輯偏好.範本.md" "$KIT/我的剪輯偏好.md"
+if [ ! -f "$KIT/我的剪輯偏好.md" ] && [ -f "$KIT/tools/我的剪輯偏好.範本.md" ]; then
+  cp "$KIT/tools/我的剪輯偏好.範本.md" "$KIT/我的剪輯偏好.md"
   echo "$OK 建立個人偏好檔：我的剪輯偏好.md"
 fi
+
+# --- 5. 把內部運作用的檔案在 Finder/檔案總管裡藏起來（純外觀，git 跟指令都不受影響）---
+# 這樣使用者打開資料夾只會看到 審片.html、我的影片/、素材庫/、我的剪輯偏好.md、錯誤回報/。
+# 純粹是每台機器的顯示設定，不影響 git 追蹤或任何腳本行為，隨時可以在 Finder 用
+# Cmd+Shift+. 切換顯示；重跑這段也不會出錯（已經隱藏的檔案再隱藏一次沒有副作用）。
+HIDE_LIST=("README.md" "LICENSE" ".gitignore" "setup.sh" "tools")
+if [ "$UNAME" = "Darwin" ]; then
+  for f in "${HIDE_LIST[@]}"; do
+    [ -e "$KIT/$f" ] && chflags hidden "$KIT/$f" 2>/dev/null
+  done
+elif command -v attrib >/dev/null 2>&1; then
+  for f in "${HIDE_LIST[@]}"; do
+    [ -e "$KIT/$f" ] && attrib +h "$KIT/$f" 2>/dev/null
+  done
+fi
+# Linux 檔案總管沒有統一的隱藏機制，跳過（不影響功能，只差在看不看得到而已）。
 
 echo ""
 echo "=== 完成 ==="
 echo "用 Claude Code(或 Codex)打開這個資料夾,ai-edit 技能會自動載入。"
-echo "然後把影片丟進來,說你想怎麼剪。詳見 README.md。"
+echo "然後把影片丟進來,說你想怎麼剪。詳見 README.md 或跟 AI 問。"
+echo "(資料夾裡少了幾個檔案是正常的 — setup.sh 把工具包內部運作用的檔案藏起來了,"
+echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"

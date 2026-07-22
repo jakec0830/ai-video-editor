@@ -99,6 +99,27 @@ def extract_audio(video_path: Path, dest: Path) -> None:
 # Shared helpers for the normalized shape
 # ---------------------------------------------------------------------------
 
+def write_compact(payload: dict, out_path: Path) -> Path:
+    """Write a token-cheap companion next to the JSON: one line per word,
+    ``<idx>  <start>-<end>  <text>``. The full JSON is ~1900 pretty-printed,
+    unicode-escaped lines (~15-20k tokens to read); this compact view is the
+    same information the cut/caption work actually needs at ~1/6 the tokens.
+    Skips the spacing entries (silence is visible from the gap between rows).
+
+    The skill should point the reading agent at this file, not the JSON.
+    """
+    lines = []
+    idx = 0
+    for w in payload.get("words", []):
+        if w.get("type") == "spacing":
+            continue
+        text = (w.get("text") or "").strip()
+        lines.append(f"{idx:>4}  {float(w['start']):7.2f}-{float(w['end']):7.2f}  {text}")
+        idx += 1
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out_path
+
+
 def _interleave_spacing(word_entries: list[dict]) -> list[dict]:
     """Insert 'spacing' entries between consecutive words so that
     pack_transcripts.py can detect silence gaps. Words are assumed sorted."""
@@ -423,11 +444,20 @@ def transcribe_one(
         )
 
     out_path.write_text(json.dumps(payload, indent=2))
+    # Always drop a compact companion the reading agent should use instead of
+    # the fat JSON (see write_compact). Cheap to produce, big token saver.
+    compact_path = out_path.with_suffix(".words.txt")
+    try:
+        write_compact(payload, compact_path)
+    except Exception:
+        compact_path = None
     dt = time.time() - t0
 
     if verbose:
         kb = out_path.stat().st_size / 1024
         print(f"  saved: {out_path.name} ({kb:.1f} KB) in {dt:.1f}s")
+        if compact_path:
+            print(f"  compact: {compact_path.name}  ← read this one, not the JSON")
         if isinstance(payload, dict) and "words" in payload:
             print(f"    words: {len(payload['words'])}")
 

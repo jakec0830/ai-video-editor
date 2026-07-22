@@ -131,19 +131,58 @@ def is_hdr_source(video: Path) -> bool:
         return False
 
 
-def is_portrait_source(video: Path) -> bool:
-    """Return True if the video's height > width (portrait / vertical)."""
+def video_display_size(video: Path) -> tuple[int, int] | None:
+    """Return the video's *display* (width, height), accounting for rotation
+    metadata, or None if it can't be determined.
+
+    Phones record 'portrait' clips as a landscape frame (e.g. 3840x2160) plus a
+    90/270° rotation tag; players auto-rotate on playback. Reading only the coded
+    width/height therefore misjudges orientation for exactly the clips students
+    shoot most (phone held upright). We read rotation from both the legacy
+    `tags.rotate` and the modern display-matrix `side_data` and swap axes when
+    the rotation is a quarter turn. JSON output avoids the brittle CSV parsing
+    (a trailing field would make int('') raise and silently fall through)."""
     try:
+        # -show_streams is stream-scoped and cheap (reads headers, not frames).
+        # It carries width/height, tags.rotate, and the display-matrix side_data.
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", str(video)],
+             "-show_streams", "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
-        w, h = map(int, out.stdout.strip().split(","))
-        return h > w
+        stream = (json.loads(out.stdout).get("streams") or [{}])[0]
+        w = int(stream.get("width") or 0)
+        h = int(stream.get("height") or 0)
+        if not w or not h:
+            return None
+        rot = 0
+        tag = (stream.get("tags") or {}).get("rotate")
+        if tag is not None:
+            try:
+                rot = int(float(tag))
+            except (TypeError, ValueError):
+                rot = 0
+        for sd in stream.get("side_data_list") or []:
+            if "rotation" in sd:
+                try:
+                    rot = int(float(sd["rotation"]))
+                except (TypeError, ValueError):
+                    pass
+        if abs(rot) % 180 == 90:
+            w, h = h, w
+        return w, h
     except Exception:
+        return None
+
+
+def is_portrait_source(video: Path) -> bool:
+    """Return True if the video *displays* taller than wide (portrait/vertical),
+    accounting for rotation metadata. Unknown → False (safe landscape default)."""
+    dims = video_display_size(video)
+    if dims is None:
         return False
+    w, h = dims
+    return h > w
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------

@@ -37,12 +37,19 @@
   video { max-width: 100%; max-height: 100%; display: none; }
   video.loaded { display: block; }
 
-  .controls { display: flex; align-items: center; gap: 10px; }
+  /* 兩排共用同一個 grid:第 1 排時間軸、第 2 排選段條 — 中間欄一樣寬,自然對齊 */
+  .controls { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 10px; align-items: center; }
+  .controls .cg { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .controls button {
     background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef;
     width: 40px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 14px;
   }
+  .controls .rangebtn { width: auto; height: auto; }
   .controls button:hover { background: #232b3b; }
+  kbd {
+    font-family: inherit; font-size: 10px; background: #2a3140; color: #9aa3b5;
+    border: 1px solid #3a4456; border-radius: 4px; padding: 0 4px; margin-left: 5px;
+  }
   .time { font-variant-numeric: tabular-nums; font-size: 13px; color: #aab2c2; min-width: 96px; }
   input[type=range].scrub { flex: 1; accent-color: #f5c542; }
 
@@ -54,22 +61,10 @@
     font-weight: 700; font-size: 13px; padding: 3px 9px; border-radius: 6px;
   }
   .stamp-row .small { font-size: 12px; color: #8b93a3; }
-  .presets { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-  .pgroup { display: flex; align-items: flex-start; gap: 8px; }
-  .pgroup .glabel {
-    font-size: 11px; color: #6b7385; width: 34px; flex-shrink: 0;
-    text-align: right; padding-top: 5px; line-height: 1.3;
-  }
-  .pgroup .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip {
-    font-size: 12px; background: #191f2b; border: 1px solid #2a3140; color: #cdd4e0;
-    padding: 3px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; line-height: 1.6;
-  }
-  .chip:hover { background: #232b3b; border-color: #3a4456; }
   .compose-input { display: flex; gap: 8px; }
   textarea#note {
-    flex: 1; resize: none; height: 46px; background: #10151d; color: #e6e9ef;
-    border: 1px solid #2c3444; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px;
+    flex: 1; resize: none; height: 58px; background: #10151d; color: #e6e9ef;
+    border: 1px solid #2c3444; border-radius: 8px; padding: 9px 12px; font: inherit; font-size: 15px;
   }
   textarea#note:focus { outline: none; border-color: #f5c542; }
   .addbtn {
@@ -91,7 +86,7 @@
   }
   .copybtn:hover { background: #329055; }
   .copybtn:disabled { opacity: .4; cursor: default; }
-  .notes { flex: 1; overflow-y: auto; padding: 8px; }
+  .notes { flex: 1 1 0; min-height: 110px; overflow-y: auto; padding: 8px; }
   .note {
     background: #141a24; border: 1px solid #222a38; border-radius: 10px;
     padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
@@ -112,24 +107,98 @@
   }
   .toast.show { opacity: 1; }
 
+  /* 字幕即時預覽 — 疊在影片上,樣式貼近成品(思源宋體 白字黑框),
+     跟右邊的字幕資料同一份:改字/斷句/併句會立刻反映在畫面上 */
+  #capoverlay { position: absolute; z-index: 5; pointer-events: none; overflow: hidden; }
+  #capoverlay .capline {
+    position: absolute; left: 50%; transform: translateX(-50%); bottom: 12%;
+    max-width: 96%; text-align: center; white-space: nowrap;
+    font-family: "Source Han Serif TC VF", "Songti TC", serif;
+    font-weight: 600; color: #fff; line-height: 1.32;
+  }
+  #capoverlay .capline .inner {
+    display: inline-block; background: rgba(0,0,0,.72); border-radius: .25em;
+    padding: .18em .45em; box-shadow: 0 .07em .32em rgba(0,0,0,.35);
+  }
+  #capoverlay .kwol { color: #FFD400; }
+
   /* V2: pen (draw on the frame) + annotated notes */
   #pen { position: absolute; z-index: 6; pointer-events: none; touch-action: none; }
   #pen.active { pointer-events: auto; cursor: crosshair; }
   .controls button.on { background: #f5c542; color: #1a1400; border-color: #f5c542; }
-  .controls .wbtn { width: auto; padding: 0 12px; font-size: 13px; }
+  .controls .wbtn { width: auto; padding: 0 12px; font-size: 13px; white-space: nowrap; }
   .cuthint { font-size: 11px; color: #6b7385; margin: -2px 0 10px; line-height: 1.5; }
   .rhead .rbtns { display: flex; gap: 8px; align-items: center; }
   .imgbtn { background: #1c2230; border: 1px solid #2c3444; color: #e6e9ef; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
   .imgbtn:hover { background: #232b3b; }
   .note .nthumb { display: block; margin-top: 8px; max-width: 100%; border-radius: 8px; border: 1px solid #2a3140; }
+
+  /* subtitle track — clickable lines, active line highlighted, dblclick to edit */
+  /* 右欄比例:字幕約 2/3,下面(打字+註解列表)約 1/3,註解永遠看得到 */
+  .subs { border-bottom: 1px solid #232833; display: flex; flex-direction: column; min-height: 0; flex: 2 1 0; }
+  .subs .shead { padding: 8px 16px 4px; font-size: 12px; color: #8b93a3; display: flex; justify-content: space-between; align-items: center; }
+  .subs .slist { overflow-y: auto; padding: 4px 8px 8px; }
+  .subline {
+    display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 7px;
+    cursor: pointer; font-size: 15px; line-height: 1.5; color: #cdd4e0;
+  }
+  .subline.edited .stx { color: #7fd8a2; }
+  .subline .stx input {
+    width: 100%; background: #10151d; color: #e6e9ef; border: 1px solid #f5c542;
+    border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 15px;
+  }
+  .subline .mrg {
+    opacity: 0; flex-shrink: 0; font-size: 11px; background: #1c2230; color: #8b93a3;
+    border: 1px solid #2c3444; border-radius: 6px; padding: 1px 7px; cursor: pointer; line-height: 1.6;
+  }
+  .subline:hover .mrg { opacity: 1; }
+  .subline .mrg:hover { background: #232b3b; color: #e6e9ef; }
+
+  /* range-select bar (CapCut 式拉區間) */
+  .rangebar {
+    position: relative; height: 28px; background: #161b25;
+    border: 1px solid #2c3444; border-radius: 6px; cursor: crosshair; touch-action: none;
+  }
+  .rangebar .rsel {
+    position: absolute; top: 0; bottom: 0; background: rgba(255, 90, 90, .35);
+    border-left: 2px solid #ff5a5a; border-right: 2px solid #ff5a5a; display: none;
+  }
+  .rangebar .rplay { position: absolute; top: 0; bottom: 0; width: 2px; background: #f5c542; }
+  .rangelabel {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 12px; color: #ff8a8a; font-variant-numeric: tabular-nums;
+    pointer-events: none; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  }
+  .rangebtn {
+    font-size: 12px; background: #3a1c1c; border: 1px solid #5a2c2c; color: #ffb0b0;
+    padding: 4px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap;
+  }
+  .rangebtn:hover { background: #4a2424; }
+  .rangebtn:disabled { opacity: .35; cursor: default; }
+  .subline:hover { background: #191f2b; }
+  .subline.active { background: #2a2410; color: #fff; }
+  .subline .st { font-variant-numeric: tabular-nums; color: #6b7385; font-size: 11px; flex-shrink: 0; min-width: 34px; }
+  .subline.active .st { color: #f5c542; }
+  .subline .stx { flex: 1; }
+  .subline .sdot { color: #f5c542; opacity: 0; font-size: 11px; }
+  .subline.noted .sdot { opacity: 1; }
+  .anchor-line { font-size: 12px; color: #f5c542; background: #211c0a; border: 1px solid #4a3f14; padding: 3px 8px; border-radius: 6px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 反白字幕裡的詞 → 浮出「塗黃」小按鈕 */
+  #hlpop {
+    position: fixed; z-index: 50; display: none;
+    background: #FFD400; color: #1a1400; font-weight: 700; font-size: 12.5px;
+    padding: 5px 12px; border-radius: 7px; cursor: pointer; border: none;
+    box-shadow: 0 3px 10px rgba(0,0,0,.5);
+  }
 </style>
 </head>
 <body>
   <header>
     <h1>審片</h1>
-    <button class="filebtn" id="pick">選擇影片檔</button>
-    <input type="file" id="file" accept="video/*" hidden />
-    <span class="hint">空白鍵 播放/暫停 · 在想改的地方暫停 → 打註解 → Enter 送出 · 全部改完按「複製全部」貼回 Claude</span>
+    <button class="filebtn" id="pick">＋ 加入檔案(影片 + 字幕)</button>
+    <input type="file" id="file" accept="video/*,.json,.srt,.vtt" multiple hidden />
+    <span class="hint">空白鍵 播放/暫停 · Ctrl+Z 上一步 · 想改的地方暫停 → 打註解 → Enter · 最後「複製全部」貼回 Claude</span>
   </header>
 
   <main>
@@ -137,16 +206,37 @@
       <div class="stage empty" id="stage">
         <div class="drop-hint" id="drophint">把影片檔拖進來,或按上面「選擇影片檔」<br /><span style="font-size:12px;color:#565e6f">通常是 我的影片/你的專案/工作檔/preview_v*.mp4</span></div>
         <video id="video" playsinline></video>
+        <div id="capoverlay"><div class="capline" id="capline"></div></div>
         <canvas id="pen"></canvas>
       </div>
 
       <div class="controls">
-        <button id="playpause" title="播放/暫停 (空白鍵)">▶</button>
-        <span class="time" id="timelabel">0:00 / 0:00</span>
+        <div class="cg">
+          <button id="playpause" title="播放/暫停 (空白鍵)">▶</button>
+          <span class="time" id="timelabel">0:00 / 0:00</span>
+        </div>
         <input type="range" class="scrub" id="scrub" min="0" max="1000" value="0" />
-        <button id="penToggle" class="wbtn" title="在畫面上畫記(標位置)">✎ 畫筆</button>
-        <button id="penClear" class="wbtn" title="清掉目前的畫記">清除</button>
+        <div class="cg">
+          <button id="penToggle" class="wbtn" title="在畫面上畫記">✎ 畫筆<kbd>P</kbd></button>
+          <button id="penClear" class="wbtn" title="清掉目前的畫記">清除<kbd>C</kbd></button>
+        </div>
+
+        <div class="cg">
+          <button class="rangebtn" id="rangein" style="background:#1c2230;border-color:#2c3444;color:#cdd4e0" title="影片停在爛段開頭,按這個">✂ 從這裡<kbd>I</kbd></button>
+          <button class="rangebtn" id="rangeout" style="background:#1c2230;border-color:#2c3444;color:#cdd4e0" title="影片停在爛段結尾,按這個">到這裡<kbd>O</kbd></button>
+        </div>
+        <div class="rangebar" id="rangebar" title="也可以直接在這條上拖一段">
+          <div class="rsel" id="rsel"></div>
+          <div class="rplay" id="rplay" style="left:0"></div>
+          <span class="rangelabel" id="rangelabel"></span>
+        </div>
+        <div class="cg">
+          <button class="rangebtn" id="rangecut" disabled>剪掉這段</button>
+          <button class="rangebtn" id="rangebroll" disabled style="background:#1c3222;border-color:#2c5a3c;color:#9fe0b5" title="這段蓋一段補充畫面(b-roll),人聲照播">加 b-roll</button>
+          <button class="rangebtn" id="rangeclear" disabled style="background:#1c2230;border-color:#2c3444;color:#8b93a3">取消</button>
+        </div>
       </div>
+      <div class="cuthint" style="margin:0">選一段(「✂ 從這裡」→「到這裡」)之後:爛段按「剪掉這段」 · 想蓋補充畫面按「加 b-roll」</div>
     </div>
 
     <div class="right">
@@ -158,13 +248,24 @@
         </div>
       </div>
 
+      <div class="subs" id="subs" style="display:none">
+        <div class="shead">
+          <span id="subcount">字幕</span>
+          <span>
+            <span style="color:#565e6f">點句子跳到那裡 · </span>
+            <button id="captoggle" style="background:none;border:none;color:#f5c542;cursor:pointer;font-size:12px;padding:0">隱藏影片上的字幕</button>
+          </span>
+        </div>
+        <div class="slist" id="slist"></div>
+      </div>
+
       <div class="composer">
         <div class="stamp-row">
           <span class="stamp" id="stamp">0:00</span>
+          <span class="anchor-line" id="anchorline" style="display:none"></span>
           <span class="small" id="stamphint">← 註解會標在這個時間點(暫停/拖時間軸來選)</span>
         </div>
-        <div class="presets" id="presets"></div>
-        <div class="cuthint">剪接類(太緊/太鬆/NG):講出你聽到的字,AI 比較好定位 · 要標位置就開「畫筆」在畫面上圈</div>
+        <div class="cuthint">剪接:拖區間條選「幾秒到幾秒」→「剪掉這段」 · 字幕:雙擊句子改錯字,「/」斷句,【詞】塗黃,滑過按「併下句」 · 標位置:畫筆(P)在畫面上圈</div>
         <div class="compose-input">
           <textarea id="note" placeholder="打你想改的地方… 例如:這裡字幕蓋到臉 / 這段太鬆剪掉一點 / 這裡推進放大"></textarea>
           <button class="addbtn" id="add" disabled>加註解</button>
@@ -178,20 +279,11 @@
   </main>
 
   <div class="toast" id="toast"></div>
+  <button id="hlpop" type="button">塗黃這個詞</button>
 
 <script>
 (function () {
   "use strict";
-
-  // 輕量預設語彙塊 — 點一下把詞插進註解框,你還是可以自由改字。
-  // 這些詞對應 ai-edit 技能的工具箱,講出來 AI 就懂。
-  const PRESETS = [
-    ["剪接", ["太緊·剪太多", "太鬆·留太多", "這段刪掉", "接不順"]],
-    ["運鏡", ["推進 zoom in", "拉遠 zoom out", "左平移", "右平移", "Ken Burns", "縮框吐槽"]],
-    ["字幕", ["蓋到臉/主體", "位置往上", "位置往下", "錯字", "斷句改這", "這個字 highlight"]],
-    ["特效", ["加圖卡", "插畫面 cutaway", "畫中畫 PiP", "特效拿掉"]],
-    ["聲音", ["加音效", "配樂太大聲", "沒對到節拍"]],
-  ];
 
   const $ = (id) => document.getElementById(id);
   const video = $("video"), stage = $("stage"), drophint = $("drophint");
@@ -207,6 +299,384 @@
   let storageKey = "";
   let penMode = false, drawing = false, hasStrokes = false;
 
+  // ---- 字幕軌 ----
+  const subsWrap = $("subs"), slist = $("slist"), subcount = $("subcount"), anchorline = $("anchorline");
+  let subs = [];          // [{start,end,text}]
+  let activeSubIdx = -1;
+
+  // 把秒數對到字幕句(在句子區間內,或最接近前一句)
+  function subIdxAt(t) {
+    if (!subs.length) return -1;
+    for (let i = 0; i < subs.length; i++) {
+      if (t >= subs[i].start && t <= subs[i].end) return i;
+    }
+    // 落在空檔:取「開始時間 <= t」的最後一句
+    let idx = -1;
+    for (let i = 0; i < subs.length; i++) { if (subs[i].start <= t) idx = i; else break; }
+    return idx;
+  }
+  function subLineFor(t) { const i = subIdxAt(t); return i >= 0 ? subs[i] : null; }
+
+  // 解析字幕檔:gen_captions 的 JSON([{start,end,text}])或 SRT/VTT
+  function parseSubs(name, txt) {
+    txt = txt.replace(/^﻿/, "");
+    const t = txt.trim();
+    if (t.startsWith("[") || t.startsWith("{")) {
+      try {
+        const arr = JSON.parse(t);
+        const list = Array.isArray(arr) ? arr : (arr.captions || arr.words || []);
+        return list.map((c) => ({
+          start: +(c.start ?? c.t ?? 0),
+          end: +(c.end ?? (c.start ?? 0) + 2),
+          text: String(c.text ?? c.word ?? "").trim(),
+          hl: c.hl ? String(c.hl) : undefined,   // 關鍵字塗黃(成品同款),預覽照樣顯示
+        })).filter((c) => c.text);
+      } catch (e) { return []; }
+    }
+    // SRT / VTT
+    const out = [];
+    const toSec = (s) => {
+      const m = s.trim().replace(",", ".").match(/(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)/);
+      if (!m) return 0;
+      return (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+    };
+    txt.split(/\r?\n\r?\n/).forEach((block) => {
+      const lines = block.split(/\r?\n/).filter((l) => l.trim() && !/^\d+$/.test(l.trim()) && !/^WEBVTT/i.test(l));
+      const tl = lines.find((l) => l.includes("-->"));
+      if (!tl) return;
+      const [a, b] = tl.split("-->");
+      const text = lines.filter((l) => !l.includes("-->")).join(" ").trim();
+      if (text) out.push({ start: toSec(a), end: toSec(b), text });
+    });
+    return out;
+  }
+
+  function subsKey() { return fileName ? "審片字幕:" + fileName : ""; }
+
+  // 字幕的每個動作(改字/斷句/併句)都變成一則「註解」進下面的列表 —
+  // 一個地方看到全部要改的東西,匯出也在同一串裡。
+  function addSubChangeNote(t, desc, op, from, to) {
+    notes.push({ id: Date.now() + Math.random(), t: t, text: desc, kind: "sub", op: op, from: from, to: to });
+    notes.sort((a, b) => a.t - b.t);
+    renderNotes();
+  }
+
+  // 「拆開又併回去」= 互相抵銷:找到對應的舊註解就直接移除它,不要留兩筆。
+  // (比對得到的才抵銷;複雜情況就讓使用者自己刪註解或 Ctrl+Z)
+  function cancelOppositeNote(op, from, to) {
+    const idx = notes.findIndex((n) => {
+      if (n.kind !== "sub") return false;
+      if (op === "merge" && n.op === "split") {
+        // 現在要併回 to;之前拆的是 n.from → n.to(陣列)
+        return n.from === to && Array.isArray(n.to) && n.to.length === 2
+          && n.to[0] === from[0] && n.to[1] === from[1];
+      }
+      if (op === "split" && n.op === "merge") {
+        return Array.isArray(to) && to.length === 2 && n.to === from
+          && Array.isArray(n.from) && n.from[0] === to[0] && n.from[1] === to[1];
+      }
+      if (op === "hl" && n.op === "hl") {
+        // 塗黃 A→B 之後又 B→A(含加了又取消)= 抵銷
+        return n.from === to && n.to === from;
+      }
+      return false;
+    });
+    if (idx >= 0) { notes.splice(idx, 1); renderNotes(); return true; }
+    return false;
+  }
+
+  // ---- 上一步(Ctrl+Z):改字/斷句/併句/加註解/刪註解 都能退 ----
+  const undoStack = [];
+  function pushUndo() {
+    undoStack.push(JSON.stringify({ subs: subs, notes: notes.map((n) => ({...n})) }));
+    if (undoStack.length > 30) undoStack.shift();
+  }
+  function undo() {
+    const snap = undoStack.pop();
+    if (!snap) { showToast("沒有可以退的步驟了"); return; }
+    try {
+      const s = JSON.parse(snap);
+      subs = s.subs || []; notes = s.notes || [];
+      saveSubEdits();
+      showSubs(); renderNotes();
+      showToast("已退回上一步");
+    } catch (e) {}
+  }
+
+  function mergeLine(i) {
+    // 併下句:i 跟 i+1 合成一句(時間取頭尾)
+    if (i < 0 || i >= subs.length - 1) return;
+    pushUndo();
+    const a = subs[i], b = subs[i + 1];
+    const from = [a.text, b.text], to = a.text + b.text;
+    a.text = to;
+    a.end = b.end;
+    subs.splice(i + 1, 1);
+    if (cancelOppositeNote("merge", from, to)) {
+      a.seg = false;   // 拆開又併回去 = 抵銷,恢復原狀
+      saveSubEdits();
+      renderSubList(); markNotedSubs();
+      showToast("已併回原句,抵銷了剛剛的斷句");
+    } else {
+      a.seg = true;    // 標記:這句動過斷句(列表會亮綠)
+      saveSubEdits();
+      addSubChangeNote(a.start, "字幕併句:「" + from[0] + "」+「" + from[1] + "」→「" + to + "」", "merge", from, to);
+      renderSubList(); markNotedSubs();
+      showToast("已併成一句(已加進下面的註解)");
+    }
+  }
+
+  function splitLine(i, parts, origText) {
+    // 斷句:一句拆成多句。瀏覽器沒有逐字時間,先按字數比例分 —
+    // 匯出後 AI 會用逐字稿把時間算準,這裡只要看起來對就好。
+    pushUndo();
+    const s = subs[i];
+    const total = Math.max(0.2, s.end - s.start);
+    const chars = parts.reduce((n, p) => n + p.length, 0) || 1;
+    const cancelled = cancelOppositeNote("split", origText, parts);
+    const out = [];
+    let cursor = s.start;
+    parts.forEach((p, k) => {
+      const dur = (k === parts.length - 1) ? (s.end - cursor) : total * (p.length / chars);
+      out.push({ start: +cursor.toFixed(2), end: +(cursor + dur).toFixed(2), text: p, seg: !cancelled });
+      cursor += dur;
+    });
+    subs.splice(i, 1, ...out);
+    saveSubEdits();
+    if (cancelled) {
+      showToast("已拆回原樣,抵銷了剛剛的併句");
+    } else {
+      addSubChangeNote(s.start, "字幕斷句:「" + origText + "」→ 拆成 " + parts.map((p) => "「" + p + "」").join(" / "), "split", origText, parts.slice());
+      showToast("已拆成 " + parts.length + " 句(已加進下面的註解;時間先估,AI 會校準)");
+    }
+    renderSubList(); markNotedSubs();
+  }
+
+  function showSubs() {
+    renderSubList();   // 裡面會順便更新標題列的「改字/斷句」計數
+    subsWrap.style.display = subs.length ? "flex" : "none";
+    activeSubIdx = -1;
+    refreshStamp();
+  }
+
+  function loadSubs(file) {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      subs = parseSubs(file.name, String(r.result || ""));
+      subs.sort((a, b) => a.start - b.start);
+      showSubs();
+      // 記住這支影片的字幕(小小的文字,存 localStorage)→ 下次開同一支自動帶回
+      try { if (subsKey() && subs.length) localStorage.setItem(subsKey(), JSON.stringify(subs)); } catch (e) {}
+      showToast(subs.length ? ("載入 " + subs.length + " 句字幕") : "字幕檔讀不到內容");
+    };
+    r.readAsText(file);
+  }
+
+  // 開影片時,若這支之前載過字幕,自動帶回
+  function restoreSubsFor(name) {
+    try {
+      const saved = JSON.parse(localStorage.getItem("審片字幕:" + name) || "null");
+      if (Array.isArray(saved) && saved.length) {
+        subs = saved;
+        showSubs();
+        showToast("已自動帶回上次的字幕(" + subs.length + " 句)");
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function saveSubEdits() {
+    try { if (subsKey() && subs.length) localStorage.setItem(subsKey(), JSON.stringify(subs)); } catch (e) {}
+  }
+
+  // 共用:設定/取消一句的塗黃(popup 跟【】編輯都走這裡的規則)
+  function setHighlight(s, newHl) {
+    if (newHl !== undefined && !s.text.includes(newHl)) return;
+    if (newHl === s.hl) return;
+    pushUndo();
+    const oldHl = s.hl;
+    s.hl = newHl;
+    saveSubEdits();
+    if (!cancelOppositeNote("hl", oldHl || null, newHl || null)) {
+      const desc = newHl
+        ? (oldHl ? "字幕塗黃改成:「" + newHl + "」" : "字幕塗黃:「" + newHl + "」(整句:" + s.text + ")")
+        : "字幕取消塗黃:「" + oldHl + "」";
+      addSubChangeNote(s.start, desc, "hl", oldHl || null, newHl || null);
+      showToast(newHl ? "已塗黃:「" + newHl + "」(影片上直接看效果)" : "已取消塗黃");
+    } else {
+      showToast(newHl ? "塗黃已恢復" : "塗黃已取消,抵銷了剛剛的標記");
+    }
+    renderSubList(); markNotedSubs();
+  }
+
+  // 反白字幕裡的詞 → 浮出塗黃按鈕(不用打任何符號)
+  const hlpop = $("hlpop");
+  let hlTarget = null;
+  function hideHlPop() { hlpop.style.display = "none"; hlTarget = null; }
+  slist.addEventListener("mouseup", () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = (sel && sel.toString().trim()) || "";
+      if (!text || text.length > 12 || sel.isCollapsed) { hideHlPop(); return; }
+      let node = sel.anchorNode;
+      if (node && node.nodeType === 3) node = node.parentElement;
+      const lineEl = node && node.closest ? node.closest(".subline") : null;
+      if (!lineEl || lineEl.querySelector("input")) { hideHlPop(); return; }
+      const s = subs[+lineEl.dataset.i];
+      if (!s || !s.text.includes(text)) { hideHlPop(); return; }
+      const r = sel.getRangeAt(0).getBoundingClientRect();
+      hlTarget = { s: s, text: text };
+      hlpop.textContent = (s.hl === text) ? "取消塗黃" : "塗黃這個詞";
+      hlpop.style.left = Math.max(6, r.left + r.width / 2 - 45) + "px";
+      hlpop.style.top = Math.max(6, r.top - 36) + "px";
+      hlpop.style.display = "block";
+    }, 0);
+  });
+  hlpop.addEventListener("mousedown", (e) => e.preventDefault());   // 別讓點擊清掉反白
+  hlpop.addEventListener("click", () => {
+    if (!hlTarget) return;
+    setHighlight(hlTarget.s, hlTarget.s.hl === hlTarget.text ? undefined : hlTarget.text);
+    window.getSelection().removeAllRanges();
+    hideHlPop();
+  });
+  document.addEventListener("mousedown", (e) => { if (e.target !== hlpop) hideHlPop(); });
+  slist.addEventListener("scroll", hideHlPop);
+
+  function startSubEdit(el, s) {
+    // 雙擊字幕句 → 原地改字(錯字直接改在這,匯出會帶「原句→改成」)
+    // 想塗黃關鍵字:把詞用【】包起來,例:我覺得很像【打遊戲】;把【】拿掉 = 取消塗黃
+    const stx = el.querySelector(".stx");
+    if (stx.querySelector("input")) return;
+    const inp = document.createElement("input");
+    inp.value = (s.hl && s.text.includes(s.hl))
+      ? s.text.replace(s.hl, "【" + s.hl + "】")   // 已塗黃的詞用【】顯示,好改好刪
+      : s.text;
+    stx.textContent = ""; stx.appendChild(inp);
+    inp.focus(); inp.select();
+    let done = false;
+    const commit = (cancel) => {
+      if (done) return; done = true;
+      let v = inp.value.trim();
+      if (!cancel && v) {
+        // 【詞】= 塗黃這個詞(成品同款關鍵字 highlight);先抽出來再比對文字
+        const hlMatch = v.match(/【([^】]+)】/);
+        const newHl = hlMatch ? hlMatch[1].trim() : undefined;
+        v = v.replace(/【|】/g, "").trim();
+
+        // 內容裡有「/」= 要斷句:拆成多行(時間按字數比例先估)
+        const parts = v.split("/").map((p) => p.trim()).filter(Boolean);
+        if (parts.length > 1) {
+          const idx = subs.indexOf(s);
+          if (idx >= 0) {
+            splitLine(idx, parts, s.text);
+            if (newHl) {  // 塗黃跟著詞落在哪一句
+              const target = subs.find((x) => x.text.includes(newHl));
+              if (target) target.hl = newHl;
+            }
+            return;
+          }
+        }
+
+        const textChanged = v !== s.text;
+        const hlChanged = newHl !== s.hl;
+        if (textChanged || hlChanged) {
+          pushUndo();
+          if (textChanged) {
+            const before = s.text;
+            if (s.orig === undefined) s.orig = s.text;  // 只記最初的原句
+            s.text = v;
+            addSubChangeNote(s.start, "字幕改字:「" + before + "」→「" + v + "」");
+          }
+          if (hlChanged && (newHl === undefined || v.includes(newHl))) {
+            const oldHl = s.hl;
+            s.hl = newHl;
+            // 加了又取消(或反過來)= 抵銷,不留兩筆
+            if (!cancelOppositeNote("hl", oldHl || null, newHl || null)) {
+              const desc = newHl
+                ? (oldHl ? "字幕塗黃改成:「" + newHl + "」" : "字幕塗黃:「" + newHl + "」(整句:" + v + ")")
+                : "字幕取消塗黃:「" + oldHl + "」";
+              addSubChangeNote(s.start, desc, "hl", oldHl || null, newHl || null);
+            } else {
+              showToast(newHl ? "塗黃已恢復" : "塗黃已取消,抵銷了剛剛的標記");
+            }
+          }
+          saveSubEdits();
+          if (textChanged) showToast("已改字幕(已加進下面的註解)");
+          else if (s.hl) showToast("已標塗黃:「" + s.hl + "」(影片上直接看效果)");
+        }
+      }
+      renderSubList(); markNotedSubs();
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;   // IME 選字的 Enter 放行
+      if (e.key === "Enter") { e.preventDefault(); commit(false); }
+      if (e.key === "Escape") { e.preventDefault(); commit(true); }
+      e.stopPropagation();   // 打字時不要觸發 P/C/I/O 快速鍵
+    });
+    inp.addEventListener("blur", () => commit(false));
+  }
+
+  function renderSubList() {
+    slist.innerHTML = "";
+    const notedTimes = new Set(notes.map((n) => subIdxAt(n.t)));
+    subs.forEach((s, i) => {
+      const el = document.createElement("div");
+      el.className = "subline" + (i === activeSubIdx ? " active" : "")
+        + (notedTimes.has(i) ? " noted" : "")
+        + ((s.orig !== undefined || s.seg) ? " edited" : "");
+      el.dataset.i = i;
+      el.innerHTML = '<span class="st">' + fmt(s.start) + '</span>'
+        + '<span class="stx"></span><span class="sdot" title="這句有註解(黃點 = 下面的註解列表有一則標在這句)">●</span>';
+      const stxEl = el.querySelector(".stx");
+      if (s.hl && s.text.includes(s.hl)) {
+        // 塗黃的詞在列表也亮黃,跟影片上一致
+        const i2 = s.text.indexOf(s.hl);
+        stxEl.appendChild(document.createTextNode(s.text.slice(0, i2)));
+        const kw = document.createElement("span");
+        kw.style.color = "#FFD400"; kw.textContent = s.hl;
+        stxEl.appendChild(kw);
+        stxEl.appendChild(document.createTextNode(s.text.slice(i2 + s.hl.length)));
+      } else {
+        stxEl.textContent = s.text;
+      }
+      if (i < subs.length - 1) {
+        const mb = document.createElement("button");
+        mb.className = "mrg"; mb.type = "button"; mb.textContent = "併下句";
+        mb.title = "跟下一句合併成一句";
+        mb.addEventListener("click", (e) => { e.stopPropagation(); mergeLine(i); });
+        el.appendChild(mb);
+      }
+      el.addEventListener("click", () => {
+        if (el.querySelector("input")) return;   // 編輯中不跳位
+        if (video.src) { video.currentTime = s.start + 0.02; }
+        frozen = s.start + 0.02;   // 點字幕 = 把註解錨點設在這句
+        refreshStamp(); refreshAddBtn();
+      });
+      el.addEventListener("dblclick", (e) => { e.preventDefault(); startSubEdit(el, s); });
+      slist.appendChild(el);
+    });
+    updateSubHeader();
+    fitCap(); updateCap();   // 改字/斷句/併句後,影片上的字幕立刻跟著變
+  }
+
+  function updateSubHeader() {
+    // 標題列保持穩定不跳動;改過的紀錄在下面的「註解」列表(綠色句 = 動過)
+    subcount.textContent = subs.length ? ("字幕 · " + subs.length + " 句") : "字幕";
+  }
+
+  function updateActiveSub() {
+    if (!subs.length) return;
+    const i = subIdxAt(frozen !== null ? frozen : (video.currentTime || 0));
+    if (i === activeSubIdx) return;
+    activeSubIdx = i;
+    const els = slist.children;
+    for (let k = 0; k < els.length; k++) els[k].classList.toggle("active", k === i);
+    const act = els[i];
+    if (act) act.scrollIntoView({ block: "nearest" });
+  }
+
   // ---- 時間格式 ----
   function fmt(sec) {
     sec = Math.max(0, Math.floor(sec || 0));
@@ -214,36 +684,6 @@
     const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
     const base = mm + ":" + String(s).padStart(2, "0");
     return h > 0 ? h + ":" + base : base;
-  }
-
-  // ---- 預設塊 ----
-  function buildPresets() {
-    const wrap = $("presets");
-    PRESETS.forEach(([label, chips]) => {
-      const g = document.createElement("div");
-      g.className = "pgroup";
-      const gl = document.createElement("span");
-      gl.className = "glabel"; gl.textContent = label;
-      const cc = document.createElement("div");
-      cc.className = "chips";
-      chips.forEach((c) => {
-        const b = document.createElement("button");
-        b.className = "chip"; b.type = "button"; b.textContent = c;
-        b.addEventListener("click", () => insertChip(c));
-        cc.appendChild(b);
-      });
-      g.appendChild(gl); g.appendChild(cc);
-      wrap.appendChild(g);
-    });
-  }
-  function insertChip(text) {
-    // 點塊 = 凍結目前時間點 + 把詞加到註解框
-    if (frozen === null) frozen = video.currentTime || 0;
-    const cur = noteBox.value.trim();
-    noteBox.value = cur ? cur + " " + text : text;
-    noteBox.focus();
-    refreshStamp();
-    refreshAddBtn();
   }
 
   // ---- 影片載入 ----
@@ -260,17 +700,26 @@
       const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
       notes = Array.isArray(saved) ? saved : [];
     } catch (e) { notes = []; }
+    restoreSubsFor(file.name);   // 這支之前載過字幕就自動帶回
     renderNotes();
   }
 
+  // 一個按鈕收兩種檔:選到影片就當影片、選到 json/srt 就當字幕(可一次多選)
   $("pick").addEventListener("click", () => $("file").click());
-  $("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+  $("file").addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []);
+    files.filter((f) => f.type.startsWith("video")).forEach(loadFile);
+    files.filter((f) => /\.(json|srt|vtt)$/i.test(f.name)).forEach(loadSubs);
+    e.target.value = "";
+  });
   ["dragover", "drop"].forEach((ev) =>
     stage.addEventListener(ev, (e) => { e.preventDefault(); })
   );
   stage.addEventListener("drop", (e) => {
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f && f.type.startsWith("video")) loadFile(f);
+    // 可以一次拖「影片 + 字幕檔」兩個進來,都會載入
+    const files = Array.from(e.dataTransfer.files || []);
+    files.filter((f) => f.type.startsWith("video")).forEach(loadFile);
+    files.filter((f) => /\.(json|srt|vtt)$/i.test(f.name)).forEach(loadSubs);
   });
 
   // ---- 播放控制 ----
@@ -282,13 +731,129 @@
   video.addEventListener("play", () => { playpause.textContent = "❚❚"; });
   video.addEventListener("pause", () => { playpause.textContent = "▶"; });
   video.addEventListener("timeupdate", () => {
-    if (video.duration) scrub.value = String((video.currentTime / video.duration) * 1000);
+    if (video.duration) {
+      scrub.value = String((video.currentTime / video.duration) * 1000);
+      rplay.style.left = (video.currentTime / video.duration * 100) + "%";
+    }
     timelabel.textContent = fmt(video.currentTime) + " / " + fmt(video.duration);
     refreshStamp();
+    updateCap();
   });
+  video.addEventListener("seeked", updateCap);
   scrub.addEventListener("input", () => {
     if (video.duration) video.currentTime = (scrub.value / 1000) * video.duration;
   });
+
+  // ---- 區間選取(CapCut 式:拖一段 = 幾秒到幾秒)----
+  const rangebar = $("rangebar"), rsel = $("rsel"), rplay = $("rplay");
+  const rangelabel = $("rangelabel"), rangecut = $("rangecut"), rangeclear = $("rangeclear");
+  let selIn = null, selOut = null, rdragging = false;
+
+  function fmt1(sec) {   // 帶一位小數:0:12.4(剪接要準到 0.1 秒)
+    sec = Math.max(0, sec || 0);
+    const m = Math.floor(sec / 60), s = (sec % 60);
+    return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+  }
+  function barTime(clientX) {
+    const r = rangebar.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    return f * (video.duration || 0);
+  }
+  function updateRangeUI() {
+    const dur = video.duration || 0;
+    const has = selIn !== null && selOut !== null && dur > 0 && Math.abs(selOut - selIn) >= 0.1;
+    if (has) {
+      const a = Math.min(selIn, selOut), b = Math.max(selIn, selOut);
+      rsel.style.display = "block";
+      rsel.style.left = (a / dur * 100) + "%";
+      rsel.style.width = ((b - a) / dur * 100) + "%";
+      rangelabel.textContent = fmt1(a) + " – " + fmt1(b) + "(" + (b - a).toFixed(1) + "s)";
+      rangecut.disabled = false; rangeclear.disabled = false;
+      $("rangebroll").disabled = false;
+    } else {
+      rsel.style.display = "none";
+      rangelabel.textContent = "";
+      rangecut.disabled = true; rangeclear.disabled = selIn === null;
+      $("rangebroll").disabled = true;
+      if (selIn !== null) rangelabel.textContent = "起點 " + fmt1(selIn) + " → 再按「到這裡」";
+    }
+  }
+  function setRangeIn(t)  { selIn = t;  if (selOut !== null && selOut < selIn) selOut = null; updateRangeUI(); }
+  function setRangeOut(t) { if (selIn === null) selIn = Math.max(0, t - 1); selOut = t; updateRangeUI(); }
+  function clearRange()   { selIn = null; selOut = null; rdragging = false; updateRangeUI(); }
+
+  rangebar.addEventListener("pointerdown", (e) => {
+    if (!video.duration) return;
+    rdragging = true; selIn = barTime(e.clientX); selOut = null;
+    rangebar.setPointerCapture(e.pointerId);
+    updateRangeUI();
+  });
+  rangebar.addEventListener("pointermove", (e) => {
+    if (!rdragging) return;
+    selOut = barTime(e.clientX);
+    video.currentTime = selOut;   // 邊拖邊看畫面,像剪輯軟體
+    updateRangeUI();
+  });
+  ["pointerup", "pointercancel"].forEach((ev) =>
+    rangebar.addEventListener(ev, () => { rdragging = false; updateRangeUI(); }));
+
+  $("rangein").addEventListener("click", () => setRangeIn(video.currentTime || 0));
+  $("rangeout").addEventListener("click", () => setRangeOut(video.currentTime || 0));
+  rangeclear.addEventListener("click", clearRange);
+  function addRangeNote(rk, defaultText, toastLabel) {
+    if (selIn === null || selOut === null) return;
+    pushUndo();
+    const a = Math.min(selIn, selOut), b = Math.max(selIn, selOut);
+    let text = noteBox.value.trim() || defaultText;
+    const note = { id: Date.now() + Math.random(), t: a, t2: b, text: text, rk: rk };
+    const line = subLineFor(a);
+    if (line) note.line = line.text;
+    notes.push(note);
+    notes.sort((x, y) => x.t - y.t);
+    noteBox.value = ""; frozen = null;
+    clearRange(); refreshStamp(); refreshAddBtn(); renderNotes();
+    showToast("已加" + toastLabel + "註解 " + fmt1(a) + "–" + fmt1(b));
+  }
+  rangecut.addEventListener("click", () => addRangeNote("cut", "這段剪掉", "剪接"));
+  $("rangebroll").addEventListener("click", () =>
+    addRangeNote("broll", "這段蓋 b-roll(有素材就用,沒有我再拍/跳過)", "b-roll"));
+
+  // ---- 字幕即時預覽(疊在影片上)----
+  const capOverlay = $("capoverlay"), capLine = $("capline");
+  let capOn = true;
+
+  function fitCap() {
+    if (!video.src) return;
+    const vr = video.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    capOverlay.style.left = (vr.left - sr.left) + "px";
+    capOverlay.style.top = (vr.top - sr.top) + "px";
+    capOverlay.style.width = vr.width + "px";
+    capOverlay.style.height = vr.height + "px";
+    // 成品是 1080 寬配 56px 字 → 等比縮到目前顯示尺寸
+    capLine.style.fontSize = Math.max(10, vr.width * (56 / 1080)) + "px";
+  }
+
+  function updateCap() {
+    if (!capOn || !subs.length) { capLine.innerHTML = ""; return; }
+    const t = video.currentTime || 0;
+    // 只在句子的時間範圍內顯示(空檔就消失,跟成品一樣)
+    const s = subs.find((x) => t >= x.start && t <= x.end);
+    if (!s) { capLine.innerHTML = ""; return; }
+    const inner = document.createElement("span");
+    inner.className = "inner";
+    if (s.hl && s.text.includes(s.hl)) {
+      const i = s.text.indexOf(s.hl);
+      inner.appendChild(document.createTextNode(s.text.slice(0, i)));
+      const kw = document.createElement("span");
+      kw.className = "kwol"; kw.textContent = s.hl;
+      inner.appendChild(kw);
+      inner.appendChild(document.createTextNode(s.text.slice(i + s.hl.length)));
+    } else {
+      inner.textContent = s.text;
+    }
+    capLine.innerHTML = "";
+    capLine.appendChild(inner);
+  }
 
   // ---- 畫筆(在畫面上標位置)----
   function setPenStyle() {
@@ -320,6 +885,12 @@
     return c.toDataURL("image/png");
   }
 
+  $("captoggle").addEventListener("click", () => {
+    capOn = !capOn;
+    $("captoggle").textContent = capOn ? "隱藏影片上的字幕" : "顯示影片上的字幕";
+    updateCap();
+  });
+
   $("penToggle").addEventListener("click", () => {
     penMode = !penMode;
     penCanvas.classList.toggle("active", penMode);
@@ -345,12 +916,21 @@
   ["pointerup", "pointercancel", "pointerleave"].forEach((ev) =>
     penCanvas.addEventListener(ev, () => { drawing = false; refreshAddBtn(); }));
 
-  video.addEventListener("loadedmetadata", fitPen);
-  window.addEventListener("resize", fitPen);
+  video.addEventListener("loadedmetadata", () => { fitPen(); fitCap(); updateCap(); });
+  window.addEventListener("resize", () => { fitPen(); fitCap(); });
 
   function refreshStamp() {
     const t = frozen !== null ? frozen : (video.currentTime || 0);
     stamp.textContent = fmt(t);
+    updateActiveSub();
+    const line = subLineFor(t);
+    if (line) {
+      anchorline.style.display = "inline-block";
+      anchorline.textContent = "「" + line.text + "」";
+      $("stamphint").style.display = "none";
+    } else {
+      anchorline.style.display = "none";
+    }
   }
 
   // ---- 打註解 ----
@@ -368,9 +948,12 @@
     if (!video.src) return;
     let text = noteBox.value.trim();
     if (!text && !hasStrokes) return;
+    pushUndo();
     if (!text) text = "(見畫記)";
     const t = frozen !== null ? frozen : (video.currentTime || 0);
     const note = { id: Date.now() + Math.random(), t: t, text: text };
+    const line = subLineFor(t);
+    if (line) note.line = line.text;   // 錨在字幕句上(比秒數準)
     if (hasStrokes) { note.img = captureAnnotated(); clearPen(); }
     notes.push(note);
     notes.sort((a, b) => a.t - b.t);
@@ -383,19 +966,54 @@
   }
   addBtn.addEventListener("click", addNote);
   noteBox.addEventListener("keydown", (e) => {
+    // 注音/IME 組字中的 Enter 是「選字」,不是送出 — 一定要放行
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addNote(); }
   });
 
-  // 空白鍵播放/暫停(在打字時不要攔截)
+  // ---- 鍵盤:空白鍵播放 + 快速鍵 P/C/I/O ----
+  // (打字中不攔截;拖完時間軸滑桿後按空白鍵也要能播 → range 滑桿不算「打字」)
+  function isTyping(e) {
+    const t = e.target;
+    if (e.isComposing) return true;
+    if (t.tagName === "TEXTAREA") return true;
+    if (t.tagName === "INPUT" && t.type !== "range") return true;
+    if (t.isContentEditable) return true;
+    return false;
+  }
   document.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "INPUT") {
-      e.preventDefault(); togglePlay();
+    // Ctrl+Z / Cmd+Z = 上一步(打字中讓瀏覽器自己處理輸入框的復原)
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyZ" && !isTyping(e)) {
+      e.preventDefault(); undo(); return;
+    }
+    if (isTyping(e)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;   // 不搶其他 Cmd/Ctrl 組合鍵(複製、列印…)
+    switch (e.code) {
+      case "Space":
+        e.preventDefault(); togglePlay(); break;
+      case "KeyP":
+        e.preventDefault(); $("penToggle").click(); break;
+      case "KeyC":
+        e.preventDefault(); clearPen(); break;
+      case "KeyI":
+        e.preventDefault(); setRangeIn(video.currentTime || 0); break;
+      case "KeyO":
+        e.preventDefault(); setRangeOut(video.currentTime || 0); break;
     }
   });
 
   // ---- 註解列表 ----
+  function markNotedSubs() {
+    if (!subs.length || !slist.children.length) return;
+    const noted = new Set(notes.map((n) => subIdxAt(n.t)));
+    for (let k = 0; k < slist.children.length; k++) {
+      slist.children[k].classList.toggle("noted", noted.has(k));
+    }
+  }
+
   function renderNotes() {
     save();
+    markNotedSubs();
     countEl.textContent = notes.length + " 則註解";
     copyBtn.disabled = notes.length === 0;
     dlimg.style.display = notes.some((n) => n.img) ? "inline-block" : "none";
@@ -411,16 +1029,34 @@
       const top = document.createElement("div");
       top.className = "nt";
       const tm = document.createElement("span");
-      tm.className = "ntime"; tm.textContent = fmt(n.t);
+      tm.className = "ntime";
+      if (n.kind === "sub") {
+        tm.textContent = "字 " + fmt(n.t);
+        tm.style.color = "#7fd8a2";   // 字幕類註解:綠色,跟列表裡動過的句子同色
+      } else if (n.t2 !== undefined) {
+        tm.textContent = (n.rk === "broll" ? "▣ " : "✂ ") + fmt1(n.t) + "–" + fmt1(n.t2);
+        if (n.rk === "broll") tm.style.color = "#9fe0b5";
+      } else {
+        tm.textContent = fmt(n.t);
+      }
       const del = document.createElement("button");
       del.className = "del"; del.textContent = "×"; del.title = "刪除";
       del.addEventListener("click", () => {
+        pushUndo();
         notes = notes.filter((x) => x.id !== n.id); renderNotes();
       });
       top.appendChild(tm); top.appendChild(del);
+      if (n.line) {
+        const ln = document.createElement("div");
+        ln.style.cssText = "font-size:12px;color:#f5c542;margin-bottom:3px;";
+        ln.textContent = "「" + n.line + "」";
+        el.appendChild(top); el.appendChild(ln);
+      } else {
+        el.appendChild(top);
+      }
       const txt = document.createElement("div");
       txt.className = "ntext"; txt.textContent = n.text;
-      el.appendChild(top); el.appendChild(txt);
+      el.appendChild(txt);
       if (n.img) {
         const im = document.createElement("img");
         im.className = "nthumb"; im.src = n.img; im.alt = "畫記";
@@ -435,7 +1071,8 @@
     if (!storageKey) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(
-        notes.map((n) => ({ id: n.id, t: n.t, text: n.text }))));
+        notes.map((n) => ({ id: n.id, t: n.t, t2: n.t2, text: n.text, line: n.line,
+                            kind: n.kind, op: n.op, from: n.from, to: n.to, rk: n.rk }))));
     } catch (e) {}
   }
 
@@ -458,13 +1095,28 @@
     lines.push("共 " + notes.length + " 則,依時間排序");
     lines.push("");
     notes.forEach((n) => {
-      let line = "[" + fmt(n.t) + "] " + n.text;
+      let line;
+      if (n.kind === "sub") {
+        // 字幕改字/斷句/併句:描述本身就完整,AI 照做並用逐字稿校準時間
+        line = "[" + fmt(n.t) + "] " + n.text;
+      } else if (n.t2 !== undefined) {
+        // 區間註解:精準到 0.1 秒的「幾秒到幾秒」(剪掉 或 加b-roll)
+        const tag = n.rk === "broll" ? "加b-roll " : "剪掉 ";
+        line = "[" + tag + fmt1(n.t) + "–" + fmt1(n.t2) + "] " + n.text;
+        if (n.line) line += "(這段開頭在「" + n.line + "」附近)";
+      } else if (n.line) {
+        // 有錨到字幕句就用句子當座標(比秒數穩,重剪也不跑掉);秒數留著當輔助
+        line = "「" + n.line + "」(" + fmt(n.t) + ") → " + n.text;
+      } else {
+        line = "[" + fmt(n.t) + "] " + n.text;
+      }
       if (n.img) line += "(附畫記圖 " + imgName(n.t) + ",紅筆是位置)";
       lines.push(line);
     });
     lines.push("");
-    lines.push("(以上每一則,請在對應時間點修改。時間是這支預覽片的時間軸;");
-    lines.push(" 遇到剪接類的『太緊/太鬆/刪掉』,用 EDL 把預覽時間對回原始影片再調。)");
+    lines.push("(以上每一則,請在對應的字幕句/時間點修改。有「」的以那句字幕為準;");
+    lines.push(" [剪掉 a–b] 的是這支預覽片的秒數,用 EDL 對回原始影片再剪;");
+    lines.push(" 「字幕改字/斷句/併句/塗黃」的照描述改 captions.json(塗黃 = 設 hl 欄位),時間用逐字稿重算。)");
     if (notes.some((n) => n.img)) {
       lines.push("(有『附畫記圖』的:我按了「下載畫記圖」,圖在下載資料夾,請一起看。)");
     }
@@ -492,7 +1144,6 @@
     toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
   }
 
-  buildPresets();
   refreshStamp();
 })();
 </script>
