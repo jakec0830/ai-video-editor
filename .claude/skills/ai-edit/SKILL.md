@@ -406,7 +406,7 @@ bash $KIT/tools/freecut/helpers/send_report.sh --name "<學員名>" --project "<
 
 1. **開場白**:「線上音效庫要裝一個小工具 + 用瀏覽器登入一次。過程有兩件事先說:裝的時候會跳一個權限確認 — 那是正常的,內容看一下按允許就好;登入會開網頁,而且**只有 5 分鐘**,所以我們先準備好再按。」
 2. **安裝**(你跑):`curl -fsSL https://static.heygen.ai/cli/install.sh | bash` — 會被權限機制擋下請使用者按允許,這是設計不是故障。裝到 `~/.local/bin`,裝完 `source KIT/tools/env.sh` 才叫得到,驗證 `heygen --version`。
-3. **登入**(倒數是從指令送出那秒開始算的,所以順序很重要):先問「準備好了嗎?按下去會出現一個網址,你要在 5 分鐘內打開它、登入 HeyGen、按授權」。他說好**才**跑 `heygen auth login --oauth`,URL 一印出來**立刻**貼給他(瀏覽器常不會自動開)。注意:「他在 heygen 網站登入過」≠ CLI 有 token,一定要走這個流程。
+3. **登入**(倒數是從指令送出那秒開始算的,所以順序很重要):先問「準備好了嗎?按下去會出現一個網址,你要在 5 分鐘內打開它、登入 HeyGen、按授權。沒有 HeyGen 帳號也沒關係,那頁可以直接**用 Google 帳號登入/註冊**,最快」。他說好**才**跑 `HEYGEN_NO_BROWSER=1 heygen auth login --oauth`(這個環境變數讓它直接把 URL 印出來,不賭瀏覽器會不會自動開),URL 一出現**立刻**貼給他。注意:「他在 heygen 網站登入過」≠ CLI 有 token,一定要走這個流程。只用 OAuth,不用 API key 路線 — key 是機密(不能經過聊天視窗)而且計費走 API credits,跟訂閱是兩回事。
 4. **驗證**:`heygen auth status`。逾時(`oauth: loopback timed out`)不用慌,再跑一次 — 這次他已經知道整個流程,通常來得及。連兩次逾時就先跳過(不影響剪片),記進回報。
 
 ---
