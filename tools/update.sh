@@ -26,6 +26,9 @@ else
     echo "  Mac/Linux: bash \"$KIT/setup.sh\""
     echo "  Windows:   powershell -ExecutionPolicy Bypass -File \"$KIT\\setup.ps1\""
     echo "（已經裝好的東西會直接跳過，不會重裝或壞掉，只補這次更新新增的部分。）"
+    echo ""
+    echo "提醒：之後開 Claude Code 都要選「這個資料夾本身」（ai-video-editor），"
+    echo "剪片助理才會載入；選到外層資料夾它就只是普通聊天。"
   else
     echo "更新沒成功（可能你改動到工具包內建的檔案）。跟 AI 說「回報問題」產一份報告傳給 Jake。"
   fi

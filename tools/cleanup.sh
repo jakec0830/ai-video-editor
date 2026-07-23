@@ -25,7 +25,19 @@ if [ ! -d "$WORK" ] && [ ! -d "$REVIEW" ]; then
 fi
 SCAN_DIRS=()
 [ -d "$WORK" ] && SCAN_DIRS+=("$WORK")
-[ -d "$REVIEW" ] && SCAN_DIRS+=("$REVIEW")
+# 專案已完成(根目錄有 成品.mp4)時,審片區整個保留 — 裡面的最終影片 + 字幕.json
+# 是使用者之後重看成品的窗口(拖進 審片.html),刪了他就沒得重看(實測回報)。
+# 專案還沒完成時,審片區裡只是舊 preview,照舊清掉。
+if [ -f "$PROJ/成品.mp4" ]; then
+  [ -d "$REVIEW" ] && echo "(審片區/ 保留不清 — 專案已完成,那是重看成品用的視窗)"
+else
+  [ -d "$REVIEW" ] && SCAN_DIRS+=("$REVIEW")
+fi
+# macOS 內建 bash 3.2 在 set -u 下展開空陣列會直接報錯,先擋掉「沒東西要掃」的情況
+if [ "${#SCAN_DIRS[@]}" -eq 0 ]; then
+  echo "沒有要掃的資料夾,不用清。"
+  exit 0
+fi
 
 # 會刪的:大媒體檔(可重生)+ 已知的大型可重生資料夾
 #   注意:captions/index.html、captions/*.json 這些「配方」不在刪除範圍。

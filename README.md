@@ -48,20 +48,23 @@ ai-video-editor/
 
 1. 打開 App，點上面的 **Code** 分頁。
 2. 環境選 **Local**（在你自己電腦上跑，才能處理你的影片）。
-3. 先隨便選一個資料夾（例如「文件」），在對話框打：
+3. 先隨便選一個資料夾（例如「文件」），在對話框打（整段複製）：
 
    > 幫我把這個 clone 下來：https://github.com/jakec0830/ai-video-editor.git
+   > 下載過程如果有任何錯誤或卡住，把經過記錄到那個資料夾裡的 錯誤回報/ 資料夾。
 
    它會下載成一個 `ai-video-editor` 資料夾。
 
 **三、開始設定**
 
-4. 用 **Select folder（選資料夾）** 選剛剛那個 `ai-video-editor` 資料夾。
+4. 用 **Select folder（選資料夾）** 選剛剛那個 **`ai-video-editor` 資料夾本身**（不是它外面的「文件」）。選對了的話，新對話的 AI 會知道自己是剪片助理；選錯了它會像個普通聊天。之後每次用也都是開這個資料夾。
 5. 在對話框打：
 
    > 幫我一步一步安裝設定
 
-6. 照它說的做。它會檢查你缺什麼（Node、ffmpeg、字型等）一個一個幫你裝。有幾步要你自己動手（輸入電腦密碼、瀏覽器登入 heygen），它會停下來明確告訴你「這步換你做」，你做完它接著走。
+6. 照它說的做。**所有指令都是 AI 跑，你全程不用開終端機。** 它會檢查你缺什麼（Node、ffmpeg、字型等）一個一個幫你裝，需要你動手的只有三種：在 App 裡按「允許」、在 Mac 自己跳出的視窗點按鈕或輸密碼（跟裝一般軟體一樣）、偶爾用瀏覽器登入。每到這種步驟它會停下來說「這步換你做」。
+
+> **會跳「權限確認」是正常的，不是壞掉。** Claude Code 對「執行指令」這件事本來就會問你一聲，某些指令（例如從網路下載腳本直接執行）一定要你點同意才會跑。看到就看一下它要做什麼，沒問題就同意。
 
 裝好後把口播影片丟進去，說「幫我剪這支影片」。
 
@@ -93,7 +96,8 @@ claude
 - **Node.js（22 以上）** — 字幕跟特效用。Mac `brew`，Windows winget `OpenJS.NodeJS.LTS`，或 nodejs.org 下載。
 - **ffmpeg** — 影音核心。Mac `brew install ffmpeg`，Windows winget `Gyan.FFmpeg`，Linux `apt install ffmpeg`。
 - **思源宋體（Source Han Serif TC）** — 字幕字型。Mac `brew install --cask font-source-han-serif-vf`，Windows 跑 `scripts\windows\install-font.ps1`（`setup.ps1` 會自動叫它），Linux 到 github.com/adobe-fonts/source-han-serif 下載。
-- **heygen CLI（選配）** — 只有要用音效／背景音樂資料庫才需要。`curl -fsSL https://static.heygen.ai/cli/install.sh | bash`，再 `heygen auth login --oauth`。不裝就自己準備音檔丟進來。
+- **heygen CLI（選配，第一次安裝不用裝）** — 線上音效／背景音樂資料庫。工具包內建的預設包（音效 + BGM）夠新手用；想要更多選擇時，跟 AI 說「**幫我設定 heygen**」，它會帶你走完（含一次瀏覽器登入 — 登入頁只等 5 分鐘，AI 會先讓你準備好才按）。
+  - 技術細節（給進階讀者 / AI）：安裝是 `curl -fsSL https://static.heygen.ai/cli/install.sh | bash`（會觸發權限確認，屬正常）；裝到 `~/.local/bin`（預設不在 PATH，`tools/env.sh` 會補）；登入 `heygen auth login --oauth` 的 5 分鐘倒數從指令送出那秒開始算，所以要先準備好再跑、URL 印出來立刻打開。
 
 ### 手動安裝（腳本失敗時）
 
@@ -114,6 +118,17 @@ pip install faster-whisper   # Intel Mac / Linux 用這個
 ```
 
 其餘（Node、ffmpeg、字型、heygen）照上面裝。
+
+#### Mac 沒有 Homebrew 怎麼辦（全新 Mac 常見）
+
+全新的 Mac 沒有 Homebrew（Mac 上裝工具的官方管理員）。**你不用開終端機** — AI 會下載 Homebrew 的**官方圖形安裝檔**（Homebrew.pkg，來自官方 GitHub），你像裝一般軟體一樣點幾下：繼續 → 安裝 → Mac 自己跳出視窗要密碼 → 完成。裝好以後 AI 裝其他東西都不再需要密碼。
+
+- 那個密碼是**你重開機登入 Mac 打的那組**，不是 Apple ID 的密碼。平常都用 Touch ID 解鎖的人也有這組 — 想一下重開機時打的那個。
+- **想不起來密碼？沒關係，跟 AI 說一聲。** 有一條全程免密碼的備案（工具全部裝進你自己的使用者資料夾），一樣能剪片。
+
+> 技術細節（給進階讀者 / AI）：免密碼備案 = Node 官方 tarball、字型 Adobe 官方 GitHub Releases、ffmpeg 社群 static build（下載後驗 SHA256），裝到 `~/.local/bin`。PATH 要寫 **`~/.zshenv` 而不是 `.zshrc`**（非互動 shell 讀不到 `.zshrc`），且當前 session 要另外 `source tools/env.sh` 才會生效。`setup.sh` 會自動偵測「裝了但 PATH 沒設」並印出正確設定。
+
+> **安全提醒**：整個安裝過程**不需要把電腦密碼交給 AI**。任何要密碼的步驟，一定是 Mac 自己跳出視窗問你。不要在聊天視窗裡貼密碼。
 
 ### Windows 疑難排解
 

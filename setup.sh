@@ -8,6 +8,9 @@ OK="[OK] "; WARN="[!]  "; ERR="[X]  "
 # 缺了會讓剪片直接炸的必要工具,記在這裡,結尾據此決定印「完成」還是「未完成」。
 # (學員實測回報:缺 ffmpeg/node 也照印「=== 完成 ===」,新手以為裝好了,剪到一半才爆。)
 MISSING=""
+# 先把已知的安裝位置補進 PATH(~/.local/bin、剛裝好的 Homebrew)再開始檢查,
+# 不然「裝好了但這個 shell 看不到」會被誤判成「沒裝」(實測回報過)。
+[ -f "$KIT/tools/env.sh" ] && . "$KIT/tools/env.sh"
 
 echo "=== ai-edit 工具包 安裝 ==="
 echo "工具包位置: $KIT"
@@ -170,7 +173,7 @@ fi
 # 純粹是每台機器的顯示設定，不影響 git 追蹤或任何腳本行為，隨時可以在 Finder 用
 # Cmd+Shift+. 切換顯示；重跑這段也不會出錯（已經隱藏的檔案再隱藏一次沒有副作用）。
 # README.md 刻意留在外面不藏 — 學員照 README 走到一半跑完 setup,回頭想再看就找不到了(實測回報)。
-HIDE_LIST=("LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools")
+HIDE_LIST=("LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools" "CLAUDE.md")
 if [ "$UNAME" = "Darwin" ]; then
   for f in "${HIDE_LIST[@]}"; do
     [ -e "$KIT/$f" ] && chflags hidden "$KIT/$f" 2>/dev/null
