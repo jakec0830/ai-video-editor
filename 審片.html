@@ -194,6 +194,9 @@
     box-shadow: 0 3px 10px rgba(0,0,0,.5);
   }
 </style>
+<!-- __審片AUTO__ AI 產「審片區/開始審片.html」時,把本行整行換成:
+     <script>window.__審片AUTO = {video:"<影片檔名>", subs:<字幕JSON內容>};</script>
+     (檔名用同資料夾的相對路徑;字幕直接內嵌,雙擊打開就全部就位,不用拖檔案) -->
 </head>
 <body>
   <header>
@@ -1155,6 +1158,36 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
   }
+
+  // ---- 審片區自動版 ----
+  // AI 每輪整備審片區時,會把本檔複製成 審片區/開始審片.html,並在 <head> 的
+  // __審片AUTO__ 標記行注入 window.__審片AUTO = {video, subs}。雙擊那個檔案,
+  // 影片(同資料夾相對路徑,file:// 直開可用)跟字幕就全部就位 — 不用拖檔案。
+  // 字幕直接吃內嵌資料(不 fetch,躲開瀏覽器對 file:// 的限制);內嵌版永遠是
+  // AI 這一輪的最新真相,所以直接覆蓋 localStorage 裡的舊字幕(註解照舊還原)。
+  (function () {
+    const A = window.__審片AUTO;
+    if (!A || !A.video) return;
+    fileName = A.video;
+    storageKey = "審片註解:" + fileName;
+    video.src = A.video;
+    video.classList.add("loaded");
+    stage.classList.remove("empty");
+    drophint.style.display = "none";
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      notes = Array.isArray(saved) ? saved : [];
+    } catch (e) { notes = []; }
+    if (A.subs) {
+      subs = parseSubs(A.subsName || "字幕.json",
+                       typeof A.subs === "string" ? A.subs : JSON.stringify(A.subs));
+      subs.sort((a, b) => a.start - b.start);
+      showSubs();
+      try { if (subsKey() && subs.length) localStorage.setItem(subsKey(), JSON.stringify(subs)); } catch (e) {}
+    }
+    renderNotes();
+    showToast("已自動載入 " + A.video + (subs.length ? "(字幕 " + subs.length + " 句)" : ""));
+  })();
 
   refreshStamp();
 })();
