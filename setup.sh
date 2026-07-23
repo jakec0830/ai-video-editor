@@ -5,6 +5,9 @@ set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
 FREECUT="$KIT/tools/freecut"
 OK="[OK] "; WARN="[!]  "; ERR="[X]  "
+# 缺了會讓剪片直接炸的必要工具,記在這裡,結尾據此決定印「完成」還是「未完成」。
+# (學員實測回報:缺 ffmpeg/node 也照印「=== 完成 ===」,新手以為裝好了,剪到一半才爆。)
+MISSING=""
 
 echo "=== ai-edit 工具包 安裝 ==="
 echo "工具包位置: $KIT"
@@ -95,21 +98,44 @@ fi
 # --- 3. 外部工具(只檢查,不強裝)-------------------------------------------
 echo ""
 echo "--- 外部工具 ---"
-if command -v ffmpeg >/dev/null 2>&1; then
-  echo "$OK ffmpeg: $(ffmpeg -version | head -1 | cut -d' ' -f1-3)"
+
+# 沒有 Homebrew 的 Mac(全新機器很常見)會把工具裝到 ~/.local/bin。那個位置預設不在
+# PATH 裡,於是「明明裝好了,setup 還是說缺」— 實測回報裡最容易誤判的一關。
+# 所以 command -v 找不到時,再去 ~/.local/bin 撈一次,分清楚是「真的沒裝」還是「PATH 沒設」。
+# 重點:PATH 要寫進 ~/.zshenv,不是 ~/.zshrc — zsh 只有互動模式才讀 .zshrc,
+# 這支腳本是非互動 shell,寫在 .zshrc 它永遠讀不到(已實測確認)。
+LOCALBIN="$HOME/.local/bin"
+found_tool() {  # $1=指令名;有的話印出可執行檔路徑
+  command -v "$1" 2>/dev/null && return 0
+  [ -x "$LOCALBIN/$1" ] && { echo "$LOCALBIN/$1"; return 0; }
+  return 1
+}
+PATH_HINT=0   # 有東西只在 ~/.local/bin 找到 → 結尾提示怎麼設 PATH
+
+FFMPEG_BIN="$(found_tool ffmpeg || true)"
+if [ -n "$FFMPEG_BIN" ]; then
+  echo "$OK ffmpeg: $("$FFMPEG_BIN" -version | head -1 | cut -d' ' -f1-3)"
+  command -v ffmpeg >/dev/null 2>&1 || { echo "$WARN     (裝在 $LOCALBIN,但 PATH 沒設 — 見最後說明)"; PATH_HINT=1; }
 else
   echo "$ERR 缺 ffmpeg。 Mac: brew install ffmpeg | Windows: choco install ffmpeg | Linux: apt install ffmpeg"
+  echo "        Mac 沒有 Homebrew 又不想裝(要密碼)的話,可以裝免密碼的家目錄版 — 請 AI 幫你,或見 README。"
+  MISSING="$MISSING ffmpeg"
 fi
 
-if command -v node >/dev/null 2>&1; then
-  NODE_MAJOR="$(node --version | sed 's/v//' | cut -d. -f1)"
+NODE_BIN="$(found_tool node || true)"
+if [ -n "$NODE_BIN" ]; then
+  NODE_VER="$("$NODE_BIN" --version)"
+  NODE_MAJOR="$(echo "$NODE_VER" | sed 's/v//' | cut -d. -f1)"
   if [ "$NODE_MAJOR" -ge 22 ] 2>/dev/null; then
-    echo "$OK node: $(node --version)(npx hyperframes 可用)"
+    echo "$OK node: $NODE_VER(npx hyperframes 可用)"
   else
-    echo "$WARN node $(node --version) 版本太舊。 npx hyperframes 需要 Node 22 以上,請更新。"
+    echo "$WARN node $NODE_VER 版本太舊。 npx hyperframes 需要 Node 22 以上,請更新。"
+    MISSING="$MISSING node(版本太舊)"
   fi
+  command -v node >/dev/null 2>&1 || { echo "$WARN     (裝在 $LOCALBIN,但 PATH 沒設 — 見最後說明)"; PATH_HINT=1; }
 else
   echo "$ERR 缺 node(字幕／特效要用 npx hyperframes)。到 nodejs.org 裝 Node 22 以上"
+  MISSING="$MISSING node"
 fi
 
 # 字型(思源宋體 / Source Han Serif)
@@ -118,6 +144,7 @@ if fc-list 2>/dev/null | grep -qi "Source Han Serif" || ls "$HOME/Library/Fonts/
 else
   echo "$WARN 找不到思源宋體(Source Han Serif VF)。 Mac: brew install --cask font-source-han-serif-vf"
   echo "        其他系統: 到 github.com/adobe-fonts/source-han-serif/releases 下載 .otf.ttc 安裝"
+  MISSING="$MISSING 思源宋體"
 fi
 
 # heygen(選配 — 音效／背景音樂資料庫)
@@ -142,7 +169,8 @@ fi
 # 這樣使用者打開資料夾只會看到 審片.html、我的影片/、素材庫/、我的剪輯偏好.md、錯誤回報/。
 # 純粹是每台機器的顯示設定，不影響 git 追蹤或任何腳本行為，隨時可以在 Finder 用
 # Cmd+Shift+. 切換顯示；重跑這段也不會出錯（已經隱藏的檔案再隱藏一次沒有副作用）。
-HIDE_LIST=("README.md" "LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools")
+# README.md 刻意留在外面不藏 — 學員照 README 走到一半跑完 setup,回頭想再看就找不到了(實測回報)。
+HIDE_LIST=("LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools")
 if [ "$UNAME" = "Darwin" ]; then
   for f in "${HIDE_LIST[@]}"; do
     [ -e "$KIT/$f" ] && chflags hidden "$KIT/$f" 2>/dev/null
@@ -155,6 +183,30 @@ fi
 # Linux 檔案總管沒有統一的隱藏機制，跳過（不影響功能，只差在看不看得到而已）。
 
 echo ""
+if [ "$PATH_HINT" = "1" ]; then
+  echo "--- PATH 設定(重要)---"
+  echo "上面有工具裝在 $LOCALBIN,但這個位置不在 PATH 裡,所以每次都要打完整路徑才叫得動。"
+  echo "把下面這段貼進 ~/.zshenv(注意:是 .zshenv,不是 .zshrc),然後**開一個新的終端機視窗**:"
+  echo ""
+  echo '  case ":$PATH:" in'
+  echo '    *":$HOME/.local/bin:"*) ;;'
+  echo '    *) export PATH="$HOME/.local/bin:$PATH" ;;'
+  echo '  esac'
+  echo ""
+  echo "為什麼一定要 .zshenv:zsh 只有「互動模式」才讀 .zshrc,這支腳本跟 AI 跑的指令都是非互動的,"
+  echo "寫在 .zshrc 它們永遠讀不到,就會變成「明明裝好了卻說沒裝」。"
+  echo "為什麼要開新視窗:已經開著的終端機不會回頭重讀設定檔。"
+  echo ""
+fi
+if [ -n "$MISSING" ]; then
+  echo "=== 還沒完成 — 缺:$MISSING ==="
+  echo "上面標 $ERR 的項目要裝好,不然一開始剪片就會出錯。"
+  echo "最簡單的做法:用 Claude Code 打開這個資料夾,跟它說「幫我一步一步安裝設定」,"
+  echo "它會照上面的清單一個一個幫你補,補完會再跑一次這支確認。"
+  echo "(資料夾裡少了幾個檔案是正常的 — setup.sh 把工具包內部運作用的檔案藏起來了,"
+  echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"
+  exit 1
+fi
 echo "=== 完成 ==="
 echo "用 Claude Code(或 Codex)打開這個資料夾,ai-edit 技能會自動載入。"
 echo "然後把影片丟進來,說你想怎麼剪。詳見 README.md 或跟 AI 問。"
