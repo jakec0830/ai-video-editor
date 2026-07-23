@@ -203,7 +203,7 @@
     <h1>審片</h1>
     <button class="filebtn" id="pick">＋ 加入檔案(影片 + 字幕)</button>
     <input type="file" id="file" accept="video/*,.json,.srt,.vtt" multiple hidden />
-    <span class="hint">空白鍵 播放/暫停 · Ctrl+Z 上一步 · 想改的地方暫停 → 打註解 → Enter · 最後「複製全部」貼回 Claude</span>
+    <span class="hint">空白鍵 播放/暫停 · ←→ 前後1秒 · ,。前後1幀 · Ctrl+Z 上一步 · 想改的地方暫停 → 打註解 → Enter · 最後「複製全部」貼回 Claude</span>
   </header>
 
   <main>
@@ -218,6 +218,10 @@
       <div class="controls">
         <div class="cg">
           <button id="playpause" title="播放/暫停 (空白鍵)">▶</button>
+          <button id="back1s" class="wbtn" title="往回 1 秒 (←)">−1秒</button>
+          <button id="backfr" class="wbtn" title="往回 1 格畫面 (,)">−1幀</button>
+          <button id="fwdfr" class="wbtn" title="往前 1 格畫面 (.)">+1幀</button>
+          <button id="fwd1s" class="wbtn" title="往前 1 秒 (→)">+1秒</button>
           <span class="time" id="timelabel">0:00 / 0:00</span>
         </div>
         <input type="range" class="scrub" id="scrub" min="0" max="1000" value="0" />
@@ -738,6 +742,22 @@
   });
 
   // ---- 播放控制 ----
+  // 微調時間:±1 秒 / ±1 幀(預覽是 24fps,一幀 = 1/24 秒)。
+  // 先暫停再動(剪接軟體的慣例 — 對格就是要停著看),並凍結在新時間點方便直接打註解。
+  const FRAME = 1 / 24;
+  function step(dt) {
+    if (!video.src) return;
+    if (!video.paused) video.pause();
+    const t = Math.min(Math.max((video.currentTime || 0) + dt, 0), video.duration || 0);
+    video.currentTime = t;
+    frozen = null;   // 微調後以新位置為準
+    refreshStamp();
+  }
+  $("back1s").addEventListener("click", () => step(-1));
+  $("fwd1s").addEventListener("click", () => step(1));
+  $("backfr").addEventListener("click", () => step(-FRAME));
+  $("fwdfr").addEventListener("click", () => step(FRAME));
+
   function togglePlay() {
     if (!video.src) return;
     if (video.paused) video.play(); else video.pause();
@@ -1014,6 +1034,16 @@
         e.preventDefault(); setRangeIn(video.currentTime || 0); break;
       case "KeyO":
         e.preventDefault(); setRangeOut(video.currentTime || 0); break;
+      // 微調:←→ = ±1 秒,,/。(Comma/Period)= ±1 幀。
+      // 忽略按住不放的自動重複(e.repeat)— 不然按住 1 秒會瞬間飛過 20 秒。
+      case "ArrowLeft":
+        e.preventDefault(); if (!e.repeat) step(-1); break;
+      case "ArrowRight":
+        e.preventDefault(); if (!e.repeat) step(1); break;
+      case "Comma":
+        e.preventDefault(); if (!e.repeat) step(-FRAME); break;
+      case "Period":
+        e.preventDefault(); if (!e.repeat) step(FRAME); break;
     }
   });
 
@@ -1093,13 +1123,16 @@
 
   // ---- 下載畫記圖(瀏覽器不能直接寫進資料夾,先落到「下載」)----
   function imgName(t) { return "審片-" + fmt(t).replace(/:/g, "-") + ".png"; }
-  dlimg.addEventListener("click", () => {
+  function downloadDrawn() {
     const drawn = notes.filter((n) => n.img);
     drawn.forEach((n, i) => setTimeout(() => {
       const a = document.createElement("a");
       a.href = n.img; a.download = imgName(n.t); a.click();
     }, i * 250));  // 錯開一點,瀏覽器才不會吃掉連續下載
-    showToast("下載 " + drawn.length + " 張畫記圖到你的「下載」資料夾");
+    return drawn.length;
+  }
+  dlimg.addEventListener("click", () => {
+    showToast("下載 " + downloadDrawn() + " 張畫記圖到你的「下載」資料夾");
   });
 
   // ---- 複製全部 ----
@@ -1133,15 +1166,18 @@
     lines.push(" [剪掉 a–b] 的是這支預覽片的秒數,用 EDL 對回原始影片再剪;");
     lines.push(" 「字幕改字/斷句/併句/塗黃」的照描述改 captions.json(塗黃 = 設 hl 欄位),時間用逐字稿重算。)");
     if (notes.some((n) => n.img)) {
-      lines.push("(有『附畫記圖』的:我按了「下載畫記圖」,圖在下載資料夾,請一起看。)");
+      lines.push("(有『附畫記圖』的:圖已自動存到我的「下載」資料夾,請直接去那裡讀,不用我上傳。)");
     }
     return lines.join("\n");
   }
   copyBtn.addEventListener("click", async () => {
     const text = buildExport();
+    // 有畫記圖就順手自動存到「下載」— 使用者不用再多按一次「下載畫記圖」。
+    const nImgs = downloadDrawn();
     try {
       await navigator.clipboard.writeText(text);
-      showToast("已複製 " + notes.length + " 則,貼回 Claude 就好");
+      showToast("已複製 " + notes.length + " 則,貼回 Claude 就好" +
+        (nImgs ? "。畫記圖已自動存到「下載」(瀏覽器若問「要下載多個檔案嗎」按允許)" : ""));
     } catch (e) {
       // clipboard 被擋 → 退而求其次:下載成 txt
       const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -1156,7 +1192,9 @@
   function showToast(msg) {
     toast.textContent = msg; toast.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
+    // 長訊息給多一點閱讀時間(約每字 70ms,最少 1.8 秒、最多 6 秒)
+    const dur = Math.min(6000, Math.max(1800, msg.length * 70));
+    toastTimer = setTimeout(() => toast.classList.remove("show"), dur);
   }
 
   // ---- 審片區自動版 ----

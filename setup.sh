@@ -186,7 +186,7 @@ fi
 # Linux 檔案總管沒有統一的隱藏機制，跳過（不影響功能，只差在看不看得到而已）。
 
 echo ""
-if [ "$PATH_HINT" = "1" ]; then
+if [ "$PATH_HINT" = "1" ] && [ "$UNAME" = "Darwin" ]; then   # .zshenv 是 Mac 的建議,別讓 Windows Git-Bash 使用者看到
   echo "--- PATH 設定(重要)---"
   echo "上面有工具裝在 $LOCALBIN,但這個位置不在 PATH 裡,所以每次都要打完整路徑才叫得動。"
   echo "把下面這段貼進 ~/.zshenv(注意:是 .zshenv,不是 .zshrc),然後**開一個新的終端機視窗**:"
