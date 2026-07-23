@@ -96,7 +96,7 @@ claude
 - **Node.js（22 以上）** — 字幕跟特效用。Mac `brew`，Windows winget `OpenJS.NodeJS.LTS`，或 nodejs.org 下載。
 - **ffmpeg** — 影音核心。Mac `brew install ffmpeg`，Windows winget `Gyan.FFmpeg`，Linux `apt install ffmpeg`。
 - **思源宋體（Source Han Serif TC）** — 字幕字型。Mac `brew install --cask font-source-han-serif-vf`，Windows 跑 `scripts\windows\install-font.ps1`（`setup.ps1` 會自動叫它），Linux 到 github.com/adobe-fonts/source-han-serif 下載。
-- **heygen CLI（選配，第一次安裝不用裝）** — 線上音效／背景音樂資料庫。工具包內建的預設包（音效 + BGM）夠新手用；想要更多選擇時，跟 AI 說「**幫我設定 heygen**」，它會帶你走完（含一次瀏覽器登入 — 登入頁只等 5 分鐘，AI 會先讓你準備好才按）。
+- **heygen CLI（選配）** — 線上音效／背景音樂資料庫。安裝流程的最後 AI 會問你要不要順便弄，全程約 2 分鐘：AI 裝好工具，你在瀏覽器按幾下登入（**可以直接用 Google 帳號登入/註冊**）。跳過也完全沒關係 — 內建預設包（音效 + BGM）夠用，之後隨時跟 AI 說「**幫我設定 heygen**」就能補。
   - 技術細節（給進階讀者 / AI）：安裝是 `curl -fsSL https://static.heygen.ai/cli/install.sh | bash`（會觸發權限確認，屬正常）；裝到 `~/.local/bin`（預設不在 PATH，`tools/env.sh` 會補）；登入 `heygen auth login --oauth` 的 5 分鐘倒數從指令送出那秒開始算，所以要先準備好再跑、URL 印出來立刻打開。
 
 ### 手動安裝（腳本失敗時）
