@@ -99,11 +99,23 @@ that path means re-cloning github.com/heygen-com/hyperframes + `bun install && b
   silence exposes them. `xref_silence.py` GAP flag does this.
 - GAP fires on a space BETWEEN two words (`gap-span >= 0.30s`) whose voiced
   portion (`>= 0.20s`) is NOT covered by silence. It uses a SEPARATE, more
-  sensitive silence pass (`--gap-noise -35`, vs -30 for MERGE/LONG): a mumbled
-  half-word reads as silence at -30 and is missed. Verified on "sonnet test":
-  the ending's swallowed 怎麼 (131.80-132.50) is invisible at -30, flagged at -35.
-- Cost: one extra ffmpeg silencedetect pass. Acceptable for a one-time pre-cut
-  check. MERGE/LONG behavior is unchanged (they keep the -30 pass).
+  sensitive silence pass than MERGE/LONG (which keep the -30 pass): a mumbled
+  half-word reads as silence at -30 and is missed.
+- **The GAP threshold is ADAPTIVE, not a fixed dB.** `--gap-noise auto` (default)
+  = this file's own `mean_volume` (ffmpeg volumedetect) + `--gap-offset` (default
+  +6 dB). Why: a fixed value can't work across recordings — measured noise floors
+  differ wildly (sonnet ~-56 dB during silence, demo ~-45 dB). A fixed -40 is
+  clean on sonnet but floods demo with breath/room-noise false positives.
+  Calibrated on 2 clips: sonnet mean -41.3 → -35.3 (catches the swallowed 怎麼 at
+  131.80-132.50, invisible at -30); demo mean -35.9 → -29.9 (1 clean GAP on a real
+  「不知道 不知道」repeat, no flood). n=2, and only sonnet's 怎麼 is a confirmed
+  true positive — offset may need re-tuning on more diverse recordings; widen if
+  it over-flags, tighten if it misses. Pass a number to `--gap-noise` to force
+  an absolute threshold.
+- Cost: silencedetect + volumedetect are AUDIO-ONLY (`-vn`) — decoding 4K video
+  frames just to scan the audio track cost minutes; with `-vn` the whole 3-pass
+  xref (MERGE silence + GAP silence + volumedetect) runs in <0.5s on a 4K source.
+  MERGE/LONG behavior is unchanged.
 
 ## Future options (evaluated 2026-07-24, NOT implemented)
 

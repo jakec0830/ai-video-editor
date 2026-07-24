@@ -22,8 +22,21 @@ Usage: python3 xref_silence.py <video> <transcript.json> [--noise -30] [--gap 0.
 """
 import argparse, json, subprocess, re, sys
 
+def mean_volume(video):
+    """This file's own average loudness (dBFS), via ffmpeg volumedetect.
+    Used to set the GAP threshold RELATIVE to the recording, not a fixed dB —
+    a fixed value floods a loud/noisy recording and misses a quiet one
+    (verified: sonnet floor ~-56dB, demo ~-45dB; -40 is clean on one, floods
+    the other). -vn: audio only, no video decode (fast even on 4K)."""
+    out = subprocess.run(["ffmpeg", "-vn", "-i", video, "-af", "volumedetect",
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    m = re.search(r"mean_volume:\s*(-?[\d.]+)", out)
+    return float(m.group(1)) if m else None
+
 def silence_windows(video, noise_db, min_sil):
-    cmd = ["ffmpeg", "-i", video, "-af",
+    # -vn: this is audio analysis; decoding 4K video frames just to scan the
+    # audio track wastes minutes. Audio-only makes it fast even on 4K sources.
+    cmd = ["ffmpeg", "-vn", "-i", video, "-af",
            f"silencedetect=noise={noise_db}dB:d={min_sil}", "-f", "null", "-"]
     out = subprocess.run(cmd, capture_output=True, text=True).stderr
     starts = [float(m) for m in re.findall(r"silence_start: ([\d.]+)", out)]
@@ -43,17 +56,29 @@ def main():
                     help="min space between two words to consider for a GAP flag (default 0.30s)")
     ap.add_argument("--gap-voice", type=float, default=0.20,
                     help="min non-silent (voiced) seconds inside that space to flag GAP (default 0.20s)")
-    ap.add_argument("--gap-noise", default="-35",
-                    help="silence threshold dB for GAP detection only — MORE sensitive than "
-                         "--noise so a quietly-mumbled half word still reads as voiced, not "
-                         "silence. -30 misses them. (default -35)")
+    ap.add_argument("--gap-noise", default="auto",
+                    help="silence threshold dB for GAP detection only. 'auto' (default) = this "
+                         "file's mean_volume + --gap-offset, so it adapts to how loud/noisy the "
+                         "recording is (a fixed dB floods a noisy file and misses a quiet one). "
+                         "Pass a number (e.g. -35) to force an absolute threshold.")
+    ap.add_argument("--gap-offset", type=float, default=6.0,
+                    help="dB above this file's mean_volume for the 'auto' GAP threshold "
+                         "(default 6). Calibrated on 2 clips (sonnet -41.3→-35.3, demo "
+                         "-35.9→-29.9); widen if GAP over-flags, tighten if it misses.")
     a = ap.parse_args()
 
     words = [w for w in json.load(open(a.transcript))["words"] if w.get("type") == "word"]
     sils = silence_windows(a.video, a.noise, 0.10)  # detect gaps >=100ms, filter later
     # Separate, more sensitive silence pass for GAP: a swallowed half-word is often
     # quiet enough that the -30dB pass calls it silence. MERGE/LONG keep the -30 pass.
-    sils_gap = silence_windows(a.video, a.gap_noise, 0.05) if a.gap_noise != a.noise else sils
+    if a.gap_noise == "auto":
+        mv = mean_volume(a.video)
+        gap_noise = round(mv + a.gap_offset, 1) if mv is not None else -35.0
+        gap_src = f"auto (mean {mv:.1f}dB + {a.gap_offset:.0f})" if mv is not None else "auto→-35 (mean_volume unread)"
+    else:
+        gap_noise = float(a.gap_noise)
+        gap_src = "forced"
+    sils_gap = silence_windows(a.video, gap_noise, 0.05) if gap_noise != float(a.noise) else sils
 
     def _overlap(s, e, windows):
         cov = 0.0
@@ -93,7 +118,8 @@ def main():
     flags.sort(key=lambda f: f[0])
     ngap = sum(1 for f in flags if f[3] == "GAP")
     print(f"words: {len(words)}  silence gaps>=100ms: {len(sils)}  "
-          f"flags: {len(flags)} ({ngap} GAP)\n")
+          f"flags: {len(flags)} ({ngap} GAP)")
+    print(f"GAP threshold: {gap_noise}dB [{gap_src}]\n")
     if not flags:
         print("No transcript/audio disagreements. First cut can trust the transcript timing.")
         return
