@@ -90,3 +90,34 @@ that path means re-cloning github.com/heygen-com/hyperframes + `bun install && b
   `lang="zh-Hant"` on the composition for correct TC glyphs.
 - HyperFrames caption composition must be 1080x1920 (vertical); the scaffold defaults to
   1920x1080 landscape — always override.
+
+## GAP flag (xref_silence) — swallowed-speech detection
+
+- Whisper drops half-said words / false starts / quiet repeats entirely: they
+  never appear as a token, so no downstream tool (verify_cut, edl_to_captions)
+  can see them. Only cross-checking transcript word spans against real audio
+  silence exposes them. `xref_silence.py` GAP flag does this.
+- GAP fires on a space BETWEEN two words (`gap-span >= 0.30s`) whose voiced
+  portion (`>= 0.20s`) is NOT covered by silence. It uses a SEPARATE, more
+  sensitive silence pass (`--gap-noise -35`, vs -30 for MERGE/LONG): a mumbled
+  half-word reads as silence at -30 and is missed. Verified on "sonnet test":
+  the ending's swallowed 怎麼 (131.80-132.50) is invisible at -30, flagged at -35.
+- Cost: one extra ffmpeg silencedetect pass. Acceptable for a one-time pre-cut
+  check. MERGE/LONG behavior is unchanged (they keep the -30 pass).
+
+## Future options (evaluated 2026-07-24, NOT implemented)
+
+Compared the toolkit against browser-use/video-use and Jaycheng1103/chatgpt-
+video-editing-skills (same EDL / 30ms-fade / timeline_view lineage). Both use
+ElevenLabs Scribe as the primary transcriber and treat local Whisper as a
+degraded fallback that needs "extra boundary QA".
+
+- **ElevenLabs Scribe as an optional backend**: verbatim ASR, keeps umm /
+  half-words / false starts, so it eliminates the Whisper swallow blind spot at
+  the source. Rejected for now: cloud API, paid, uploads the user's raw audio —
+  conflicts with the toolkit's local-first, zero-setup, zero-cost design for
+  students. The GAP flag is the local-only equivalent patch.
+- **verify_cut self-eval on rendered output**: video-use re-checks each cut on
+  the rendered frames/audio (visual jumps, audio pops). Possible future hardening
+  of verify_cut. Note it would NOT have caught the 怎麼 case — what the ASR can't
+  hear, a rendered-output re-listen can't hear either. GAP is the right layer.
