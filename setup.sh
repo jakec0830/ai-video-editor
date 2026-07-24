@@ -142,24 +142,21 @@ else
 fi
 
 # 字型(思源宋體 / Source Han Serif)
-if fc-list 2>/dev/null | grep -qi "Source Han Serif" || ls "$HOME/Library/Fonts/SourceHanSerif"* >/dev/null 2>&1; then
+# 注意:不能只看檔名存在 — 死掉的 symlink(例:brew cask 連到別的使用者家目錄)
+# glob 會過,但實際一開就是 OSError。-r 會跟著 symlink 解析,-s 排除空檔。
+FONT_OK=0
+for f in "$HOME/Library/Fonts/SourceHanSerif"*; do
+  [ -r "$f" ] && [ -s "$f" ] && FONT_OK=1 && break
+done
+if fc-list 2>/dev/null | grep -qi "Source Han Serif" || [ "$FONT_OK" = 1 ]; then
   echo "$OK 字型: 思源宋體(Source Han Serif)有裝"
 else
-  echo "$WARN 找不到思源宋體(Source Han Serif VF)。 Mac: brew install --cask font-source-han-serif-vf"
-  echo "        其他系統: 到 github.com/adobe-fonts/source-han-serif/releases 下載 .otf.ttc 安裝"
+  echo "$WARN 找不到思源宋體(Source Han Serif VF)。最穩的裝法(55MB,不用密碼、不碰 Homebrew):"
+  echo "        curl -fL -o ~/Library/Fonts/SourceHanSerif-VF.otf.ttc \\"
+  echo "          https://github.com/adobe-fonts/source-han-serif/raw/release/Variable/OTC/SourceHanSerif-VF.otf.ttc"
+  echo "        (Mac 若 /opt/homebrew 是你自己的,也可 brew install --cask font-source-han-serif-vf;"
+  echo "         但那棵樹屬於別的帳號時 brew 會假成功、字型不會出現,請直接用上面那行)"
   MISSING="$MISSING 思源宋體"
-fi
-
-# heygen(選配 — 音效／背景音樂資料庫)
-if command -v heygen >/dev/null 2>&1; then
-  if heygen auth status >/dev/null 2>&1; then
-    echo "$OK heygen CLI 已裝 + 已登入(音效／音樂資料庫可用)"
-  else
-    echo "$WARN heygen CLI 有裝但沒登入。 執行: heygen auth login --oauth"
-  fi
-else
-  echo "$WARN heygen CLI 沒裝(選配 — 只有要用音效／音樂資料庫才需要)。"
-  echo "        安裝: curl -fsSL https://static.heygen.ai/cli/install.sh | bash   再: heygen auth login --oauth"
 fi
 
 # --- 4. 首次建立個人偏好檔（從範本複製，之後不進 git，更新才不會蓋掉）---
