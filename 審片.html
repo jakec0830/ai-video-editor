@@ -121,6 +121,14 @@
     padding: .18em .45em; box-shadow: 0 .07em .32em rgba(0,0,0,.35);
   }
   #capoverlay .kwol { color: #FFD400; }
+  /* 特效選單:字幕樣式在影片上的即時預覽(st-classic = 預設黑框,不用覆蓋) */
+  #capoverlay.st-clean .inner { background: none; box-shadow: none; font-weight: 800; text-shadow: 0 .04em .12em rgba(0,0,0,.9); }
+  #capoverlay.st-outline .inner { background: none; box-shadow: none; font-weight: 800; -webkit-text-stroke: .09em #000; paint-order: stroke fill; }
+  #capoverlay.st-neon .inner { background: none; box-shadow: none; font-weight: 800; color: #eafcff; text-shadow: 0 0 .12em #00e5ff, 0 0 .34em #00b4ff; }
+  #capoverlay.st-neon .kwol { color: #fff; }
+  #capoverlay.st-gradient .inner { background: linear-gradient(92deg,#ffd36e,#ff5e9c 55%,#8a6bff); -webkit-background-clip: text; background-clip: text; color: transparent; box-shadow: none; font-weight: 900; }
+  #capoverlay.st-emphasis .inner { background: none; box-shadow: none; text-shadow: 0 .04em .12em rgba(0,0,0,.9); }
+  #capoverlay.st-emphasis .kwol { font-size: 1.4em; font-weight: 900; color: #ffd400; }
 
   /* V2: pen (draw on the frame) + annotated notes */
   #pen { position: absolute; z-index: 6; pointer-events: none; touch-action: none; }
@@ -344,7 +352,7 @@
       </div>
 
       <div class="fxwrap">
-        <button id="fxtoggle" type="button">🎬 加特效 / 樣式(字幕・色調・下標・數字卡・運鏡)▾</button>
+        <button id="fxtoggle" type="button">🎬 字幕樣式 / 色調(整支的長相,挑了直接在影片上看)▾</button>
         <div id="fxpanel" style="display:none"></div>
       </div>
 
@@ -1187,7 +1195,7 @@
       localStorage.setItem(storageKey, JSON.stringify(
         notes.map((n) => ({ id: n.id, t: n.t, t2: n.t2, text: n.text, line: n.line,
                             kind: n.kind, op: n.op, from: n.from, to: n.to, rk: n.rk,
-                            fxCat: n.fxCat, fxName: n.fxName, fxGlobal: n.fxGlobal }))));
+                            fxCat: n.fxCat, fxName: n.fxName, fxGlobal: n.fxGlobal, fxPv: n.fxPv }))));
     } catch (e) {}
   }
 
@@ -1243,7 +1251,7 @@
     lines.push(" [剪掉 a–b] 的是這支預覽片的秒數,用 EDL 對回原始影片再剪;");
     lines.push(" 「字幕改字/斷句/併句/塗黃」的照描述改 captions.json(塗黃 = 設 hl 欄位),時間用逐字稿重算。)");
     if (notes.some((n) => n.rk === "fx")) {
-      lines.push("(特效選單:字幕樣式→gen_captions --style;色調→grade.py preset;下標/數字卡→tools/overlay-cards.md;運鏡→SKILL 5.1。【整支】套整支,有時間點的放那個時間點。)");
+      lines.push("(特效選單【整支】:字幕樣式→gen_captions --style;色調→grade.py preset。這是整支套用的長相。)");
     }
     if (notes.some((n) => n.img)) {
       lines.push("(有『附畫記圖』的:圖已自動存到我的「下載」資料夾,請直接去那裡讀,不用我上傳。)");
@@ -1269,26 +1277,26 @@
   });
 
   // ---- 特效選單(FX picker)。只放已驗過的效果;挑了就寫進註解,貼回給 AI。----
+  // 只放「整支的長相」= 字幕樣式 + 色調(挑了直接在影片上看)。
+  // 下標/數字卡/運鏡 是「某一刻」的效果,由 AI 在節奏提案時建議(見 tools/overlay-cards.md、SKILL 5.1)。
   const FX_CATALOG = [
-    { cat: "字幕樣式", global: true, kind: "cap", hint: "整支字幕的長相,挑一個。", items: [
+    { cat: "字幕樣式", global: true, kind: "cap", hint: "整支字幕的長相。挑了直接在影片上看。", items: [
       { label: "經典款", pv: "classic" }, { label: "乾淨無框", pv: "clean" }, { label: "描邊 TikTok", pv: "outline" },
       { label: "霓虹", pv: "neon" }, { label: "漸層", pv: "gradient" }, { label: "重點放大", pv: "emphasis" }] },
-    { cat: "色調", global: true, kind: "tone", hint: "整支影片的色調,挑一個。", items: [
+    { cat: "色調", global: true, kind: "tone", hint: "整支影片的色調。挑了直接在影片上看(預覽近似,成品用 grade.py 精算)。", items: [
       { label: "暖色 親和", pv: "warm" }, { label: "冷色 專業", pv: "cool" }, { label: "明亮乾淨", pv: "bright" },
       { label: "低飽和高級", pv: "mutedc" }, { label: "電影感", pv: "cine" }] },
-    { cat: "下標", global: false, kind: "lt", hint: "放在目前時間點:秀名字/頭銜(你是誰)。", items: [
-      { label: "乾淨橫條", pv: "bar" }, { label: "膠囊", pv: "pill" }, { label: "毛玻璃", pv: "glasslt" }] },
-    { cat: "數字卡", global: false, kind: "card", hint: "放在目前時間點:秀成果數字(強調重點)。", items: [
-      { label: "實心", pv: "solid" }, { label: "毛玻璃", pv: "glasscard" }] },
-    { cat: "運鏡", global: false, kind: "mo", hint: "放在目前時間點:讓畫面動一下。", items: [
-      { label: "推進放大(強調)", pv: "zoomin" }, { label: "拉遠", pv: "zoomout" },
-      { label: "平移", pv: "pan" }, { label: "縮框(吐槽)", pv: "punch" }] },
   ];
+  // 色調即時預覽(CSS 近似;成品調色仍用 grade.py 精算)
+  const FX_COLOR_FILTER = {
+    warm:   "brightness(1.05) contrast(1.04) saturate(1.14) sepia(.12)",
+    cool:   "brightness(1.03) contrast(1.05) saturate(.9)",
+    bright: "brightness(1.09) contrast(1.07) saturate(1.1)",
+    mutedc: "brightness(1.03) contrast(.99) saturate(.72)",
+    cine:   "contrast(1.14) saturate(.9) brightness(.98) sepia(.15)",
+  };
   function fxInner(kind, pv) {
     if (kind === "cap") return '<span class="cap">' + (pv === "emphasis" ? '字<b>幕</b>' : '字幕') + '</span>';
-    if (kind === "lt") return '<span class="lt">名字</span>';
-    if (kind === "card") return '<span class="card">88%</span>';
-    if (kind === "mo") return '<div class="mo"></div>';
     return "";  // tone: 整塊底色就是預覽
   }
   const fxToggle = document.getElementById("fxtoggle");
@@ -1308,30 +1316,31 @@
         c.dataset.global = g.global ? "1" : "";
         c.innerHTML = '<div class="pv ' + it.pv + '">' + fxInner(g.kind, it.pv) + '</div>' +
                       '<span class="fxlbl">' + it.label + '</span>';
-        c.addEventListener("click", () => pickFx(g, it.label));
+        c.addEventListener("click", () => pickFx(g, it));
         row.appendChild(c);
       });
       gd.appendChild(row); fxPanel.appendChild(gd);
     });
   }
-  function pickFx(g, label) {
+  // 即時套在影片上:字幕樣式改字幕預覽的長相;色調把 filter 套在影片上。
+  function applyFxLive(cat, pv) {
+    if (cat === "字幕樣式") capOverlay.className = pv ? "st-" + pv : "";
+    else if (cat === "色調") video.style.filter = FX_COLOR_FILTER[pv] || "";
+  }
+  function applyFxSaved() {
+    notes.forEach((n) => { if (n.rk === "fx" && n.fxGlobal) applyFxLive(n.fxCat, n.fxPv); });
+  }
+  function pickFx(g, it) {
     pushUndo();
-    if (g.global) {
-      notes = notes.filter((n) => !(n.rk === "fx" && n.fxGlobal && n.fxCat === g.cat));
-      notes.push({ id: Date.now() + Math.random(), t: 0, rk: "fx", fxGlobal: true,
-                   fxCat: g.cat, fxName: label, text: g.cat + ":" + label });
-      showToast("整支" + g.cat + "設為「" + label + "」");
-    } else {
-      const t = frozen !== null ? frozen : (video.currentTime || 0);
-      const note = { id: Date.now() + Math.random(), t: t, rk: "fx",
-                     fxCat: g.cat, fxName: label, text: g.cat + ":" + label };
-      const ln = subLineFor(t); if (ln) note.line = ln.text;
-      notes.push(note);
-      showToast(g.cat + "「" + label + "」加在 " + fmt(t));
-    }
+    notes = notes.filter((n) => !(n.rk === "fx" && n.fxGlobal && n.fxCat === g.cat));
+    notes.push({ id: Date.now() + Math.random(), t: 0, rk: "fx", fxGlobal: true,
+                 fxCat: g.cat, fxName: it.label, fxPv: it.pv, text: g.cat + ":" + it.label });
+    applyFxLive(g.cat, it.pv);
+    showToast("整支" + g.cat + "設為「" + it.label + "」,播影片看看效果");
     notes.sort((a, b) => a.t - b.t);
     renderNotes(); updateFxActive();
   }
+  video.addEventListener("loadeddata", applyFxSaved);
   function updateFxActive() {
     if (!fxBuilt) return;
     fxPanel.querySelectorAll(".fxchip").forEach((c) => {
