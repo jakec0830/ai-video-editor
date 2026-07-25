@@ -205,11 +205,54 @@
   .fxgroup:last-child { margin-bottom: 2px; }
   .fxgh { font-size: 12px; color: #9a92ad; margin-bottom: 6px; }
   .fxgh b { color: #d9c9ff; font-size: 13px; }
-  .fxrow { display: flex; flex-wrap: wrap; gap: 6px; }
-  .fxchip { background: #221d30; color: #e7def7; border: 1px solid #3a3350;
-    border-radius: 999px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; }
+  .fxrow { display: flex; flex-wrap: wrap; gap: 7px; }
+  .fxchip { width: 94px; background: #221d30; border: 1px solid #3a3350; border-radius: 10px;
+    padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; }
   .fxchip:hover { border-color: #7c5cff; }
-  .fxchip.on { background: #f5c542; color: #1a1400; border-color: #f5c542; font-weight: 700; }
+  .fxchip.on { border-color: #f5c542; box-shadow: 0 0 0 1px #f5c542; }
+  .fxchip .fxlbl { font-size: 11px; line-height: 1.2; color: #cfc7e0; text-align: center; }
+  .fxchip.on .fxlbl { color: #f5c542; font-weight: 700; }
+  /* mini 預覽塊:假的「影片」底 + 效果本人 */
+  .pv { height: 46px; border-radius: 7px; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #454b56, #23272f); }
+  /* 字幕樣式 */
+  .pv .cap { font-size: 19px; font-weight: 800; color: #fff; }
+  .pv.classic .cap { background: rgba(0,0,0,.72); padding: 2px 8px; border-radius: 5px; }
+  .pv.clean .cap { text-shadow: 0 2px 6px rgba(0,0,0,.9); }
+  .pv.outline .cap { -webkit-text-stroke: 2.5px #000; paint-order: stroke fill; }
+  .pv.neon .cap { color: #eafcff; text-shadow: 0 0 4px #00e5ff, 0 0 11px #00b4ff; }
+  .pv.gradient .cap { background: linear-gradient(92deg,#ffd36e,#ff5e9c 55%,#8a6bff);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .pv.emphasis .cap b { font-size: 26px; color: #ffd400; }
+  /* 色調(整塊上色) */
+  .pv.warm { background: linear-gradient(135deg,#ffcf8f,#ff9d5c); }
+  .pv.cool { background: linear-gradient(135deg,#bcd3ff,#6f97e0); }
+  .pv.bright { background: linear-gradient(135deg,#ffffff,#dbe3ec); }
+  .pv.mutedc { background: linear-gradient(135deg,#bcc0b2,#8b9082); }
+  .pv.cine { background: linear-gradient(135deg,#ffb87a,#1f5a6b); }
+  /* 下標 */
+  .pv .lt { position: absolute; left: 7px; bottom: 7px; font-size: 11px; font-weight: 700; }
+  .pv.bar .lt { background: #111; border-left: 4px solid #ff5e5e; padding: 2px 7px; color: #fff; }
+  .pv.pill .lt { background: #fff; color: #111; border-radius: 18px; padding: 2px 9px; }
+  .pv.glasslt .lt { background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-radius: 7px; padding: 2px 7px; color: #fff; }
+  /* 數字卡 */
+  .pv .card { padding: 4px 10px; border-radius: 7px; font-size: 15px; font-weight: 900; color: #ffd400; }
+  .pv.solid .card { background: rgba(10,12,18,.85); }
+  .pv.glasscard .card { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.32);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  /* 運鏡(會動) */
+  .pv .mo { position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 42%, #9aa4b5 0 26%, #39414d 28%); }
+  .pv.zoomin .mo { animation: pvzoom 1.7s ease-in-out infinite; }
+  .pv.zoomout .mo { animation: pvzoomout 1.7s ease-in-out infinite; }
+  .pv.pan .mo { animation: pvpan 2s ease-in-out infinite; }
+  .pv.punch .mo { animation: pvpunch 1.5s ease-in-out infinite; }
+  @keyframes pvzoom { 0%,100%{transform:scale(1)} 50%{transform:scale(1.35)} }
+  @keyframes pvzoomout { 0%,100%{transform:scale(1.3)} 50%{transform:scale(1)} }
+  @keyframes pvpan { 0%,100%{transform:translateX(-12%) scale(1.25)} 50%{transform:translateX(12%) scale(1.25)} }
+  @keyframes pvpunch { 0%,100%{transform:scale(1)} 15%,40%{transform:scale(1.28)} 55%{transform:scale(1)} }
 </style>
 <!-- __審片AUTO__ AI 產「審片區/開始審片.html」時,把本行整行換成:
      <script>window.__審片AUTO = {video:"<影片檔名>", subs:<字幕JSON內容>};</script>
@@ -1227,17 +1270,27 @@
 
   // ---- 特效選單(FX picker)。只放已驗過的效果;挑了就寫進註解,貼回給 AI。----
   const FX_CATALOG = [
-    { cat: "字幕樣式", global: true,  hint: "整支字幕的長相,挑一個。",
-      items: ["經典款", "乾淨無框", "描邊 TikTok", "霓虹", "漸層", "重點放大"] },
-    { cat: "色調",     global: true,  hint: "整支影片的色調,挑一個。",
-      items: ["暖色 親和", "冷色 專業", "明亮乾淨", "低飽和高級", "電影感"] },
-    { cat: "下標",     global: false, hint: "放在目前時間點:秀名字/頭銜(你是誰)。",
-      items: ["乾淨橫條", "膠囊", "毛玻璃"] },
-    { cat: "數字卡",   global: false, hint: "放在目前時間點:秀一個成果數字(強調重點)。",
-      items: ["實心", "毛玻璃"] },
-    { cat: "運鏡",     global: false, hint: "放在目前時間點:讓畫面動一下。",
-      items: ["推進放大(強調)", "拉遠", "平移", "縮框(吐槽)"] },
+    { cat: "字幕樣式", global: true, kind: "cap", hint: "整支字幕的長相,挑一個。", items: [
+      { label: "經典款", pv: "classic" }, { label: "乾淨無框", pv: "clean" }, { label: "描邊 TikTok", pv: "outline" },
+      { label: "霓虹", pv: "neon" }, { label: "漸層", pv: "gradient" }, { label: "重點放大", pv: "emphasis" }] },
+    { cat: "色調", global: true, kind: "tone", hint: "整支影片的色調,挑一個。", items: [
+      { label: "暖色 親和", pv: "warm" }, { label: "冷色 專業", pv: "cool" }, { label: "明亮乾淨", pv: "bright" },
+      { label: "低飽和高級", pv: "mutedc" }, { label: "電影感", pv: "cine" }] },
+    { cat: "下標", global: false, kind: "lt", hint: "放在目前時間點:秀名字/頭銜(你是誰)。", items: [
+      { label: "乾淨橫條", pv: "bar" }, { label: "膠囊", pv: "pill" }, { label: "毛玻璃", pv: "glasslt" }] },
+    { cat: "數字卡", global: false, kind: "card", hint: "放在目前時間點:秀成果數字(強調重點)。", items: [
+      { label: "實心", pv: "solid" }, { label: "毛玻璃", pv: "glasscard" }] },
+    { cat: "運鏡", global: false, kind: "mo", hint: "放在目前時間點:讓畫面動一下。", items: [
+      { label: "推進放大(強調)", pv: "zoomin" }, { label: "拉遠", pv: "zoomout" },
+      { label: "平移", pv: "pan" }, { label: "縮框(吐槽)", pv: "punch" }] },
   ];
+  function fxInner(kind, pv) {
+    if (kind === "cap") return '<span class="cap">' + (pv === "emphasis" ? '字<b>幕</b>' : '字幕') + '</span>';
+    if (kind === "lt") return '<span class="lt">名字</span>';
+    if (kind === "card") return '<span class="card">88%</span>';
+    if (kind === "mo") return '<div class="mo"></div>';
+    return "";  // tone: 整塊底色就是預覽
+  }
   const fxToggle = document.getElementById("fxtoggle");
   const fxPanel = document.getElementById("fxpanel");
   let fxBuilt = false;
@@ -1249,11 +1302,13 @@
       h.innerHTML = "<b>" + g.cat + (g.global ? "(整支)" : "(放這裡)") + "</b> " + g.hint;
       gd.appendChild(h);
       const row = document.createElement("div"); row.className = "fxrow";
-      g.items.forEach((label) => {
+      g.items.forEach((it) => {
         const c = document.createElement("button"); c.type = "button";
-        c.className = "fxchip"; c.textContent = label; c.dataset.cat = g.cat;
+        c.className = "fxchip"; c.dataset.cat = g.cat; c.dataset.label = it.label;
         c.dataset.global = g.global ? "1" : "";
-        c.addEventListener("click", () => pickFx(g, label));
+        c.innerHTML = '<div class="pv ' + it.pv + '">' + fxInner(g.kind, it.pv) + '</div>' +
+                      '<span class="fxlbl">' + it.label + '</span>';
+        c.addEventListener("click", () => pickFx(g, it.label));
         row.appendChild(c);
       });
       gd.appendChild(row); fxPanel.appendChild(gd);
@@ -1282,7 +1337,7 @@
     fxPanel.querySelectorAll(".fxchip").forEach((c) => {
       if (!c.dataset.global) return;
       c.classList.toggle("on", notes.some((n) => n.rk === "fx" && n.fxGlobal &&
-        n.fxCat === c.dataset.cat && n.fxName === c.textContent));
+        n.fxCat === c.dataset.cat && n.fxName === c.dataset.label));
     });
   }
   fxToggle.addEventListener("click", () => {
