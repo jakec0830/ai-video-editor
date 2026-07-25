@@ -207,8 +207,15 @@ if [ -n "$MISSING" ]; then
   echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"
   exit 1
 fi
-echo "=== 完成 ==="
-echo "用 Claude Code(或 Codex)打開這個資料夾,ai-edit 技能會自動載入。"
-echo "然後把影片丟進來,說你想怎麼剪。詳見 README.md 或跟 AI 問。"
+echo "✅ ============================== ✅"
+echo "        裝好了,可以開始剪片了"
+echo "✅ ============================== ✅"
+echo ""
+echo "接下來 3 步:"
+echo "  1. 用 Claude Code 打開這個資料夾(Select folder 選 ai-video-editor 本身)"
+echo "  2. 開新對話,把你的口播影片拖進來"
+echo "  3. 打一句:幫我剪這支影片"
+echo ""
+echo "看到上面這段綠色 ✅ 就是「裝好了」的訊號。詳見 README.md 或直接問 AI。"
 echo "(資料夾裡少了幾個檔案是正常的 — setup.sh 把工具包內部運作用的檔案藏起來了,"
 echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"

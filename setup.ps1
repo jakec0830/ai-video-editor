@@ -143,8 +143,13 @@ foreach ($f in @("LICENSE",".gitignore","setup.sh","setup.ps1","scripts","tools"
   }
 }
 
-Write-Host "`n=== 完成 ==="
-Write-Host "用 Claude Code 打開這個資料夾,ai-edit 技能會自動載入。"
-Write-Host "然後把影片丟進來,說你想怎麼剪。詳見 README.md 或跟 AI 問。"
+Write-Host "`n==============================" -ForegroundColor Green
+Write-Host "   [ OK ] 裝好了,可以開始剪片了" -ForegroundColor Green
+Write-Host "==============================`n" -ForegroundColor Green
+Write-Host "接下來 3 步:"
+Write-Host "  1. 用 Claude Code 打開這個資料夾(Select folder 選 ai-video-editor 本身)"
+Write-Host "  2. 開新對話,把你的口播影片拖進來"
+Write-Host "  3. 打一句:幫我剪這支影片`n"
+Write-Host "看到上面綠色的 [ OK ] 橫幅就是「裝好了」的訊號。詳見 README.md 或直接問 AI。"
 Write-Host "(資料夾裡少了幾個檔案是正常的 — 內部運作用的檔案被藏起來了,不影響功能;"
 Write-Host " 檔案總管 → 檢視 → 顯示 → 隱藏的項目 可以隨時看到它們。)"

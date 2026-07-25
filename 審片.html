@@ -193,6 +193,23 @@
     padding: 5px 12px; border-radius: 7px; cursor: pointer; border: none;
     box-shadow: 0 3px 10px rgba(0,0,0,.5);
   }
+
+  /* 特效選單(FX picker)— 預設收起,省空間 */
+  #fxtoggle { width: 100%; margin-top: 8px; background: #241c33; color: #d9c9ff;
+    border: 1px solid #4a3d63; border-radius: 8px; padding: 9px 12px;
+    font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; }
+  #fxtoggle.on { background: #3a2d55; border-color: #7c5cff; }
+  #fxpanel { margin-top: 8px; border: 1px solid #2c2740; border-radius: 10px;
+    padding: 10px; background: #16131f; }
+  .fxgroup { margin-bottom: 12px; }
+  .fxgroup:last-child { margin-bottom: 2px; }
+  .fxgh { font-size: 12px; color: #9a92ad; margin-bottom: 6px; }
+  .fxgh b { color: #d9c9ff; font-size: 13px; }
+  .fxrow { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fxchip { background: #221d30; color: #e7def7; border: 1px solid #3a3350;
+    border-radius: 999px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; }
+  .fxchip:hover { border-color: #7c5cff; }
+  .fxchip.on { background: #f5c542; color: #1a1400; border-color: #f5c542; font-weight: 700; }
 </style>
 <!-- __審片AUTO__ AI 產「審片區/開始審片.html」時,把本行整行換成:
      <script>window.__審片AUTO = {video:"<影片檔名>", subs:<字幕JSON內容>};</script>
@@ -281,6 +298,11 @@
           <textarea id="note" placeholder="打你想改的地方… 例如:這裡字幕蓋到臉 / 這段太鬆剪掉一點 / 這裡推進放大"></textarea>
           <button class="addbtn" id="add" disabled>加註解</button>
         </div>
+      </div>
+
+      <div class="fxwrap">
+        <button id="fxtoggle" type="button">🎬 加特效 / 樣式(字幕・色調・下標・數字卡・運鏡)▾</button>
+        <div id="fxpanel" style="display:none"></div>
       </div>
 
       <div class="notes" id="notes">
@@ -1076,7 +1098,10 @@
       top.className = "nt";
       const tm = document.createElement("span");
       tm.className = "ntime";
-      if (n.kind === "sub") {
+      if (n.rk === "fx") {
+        tm.textContent = n.fxGlobal ? "★ 整支" : "✨ " + fmt(n.t);
+        tm.style.color = "#c9a6ff";
+      } else if (n.kind === "sub") {
         tm.textContent = "字 " + fmt(n.t);
         tm.style.color = "#7fd8a2";   // 字幕類註解:綠色,跟列表裡動過的句子同色
       } else if (n.t2 !== undefined) {
@@ -1118,7 +1143,8 @@
     try {
       localStorage.setItem(storageKey, JSON.stringify(
         notes.map((n) => ({ id: n.id, t: n.t, t2: n.t2, text: n.text, line: n.line,
-                            kind: n.kind, op: n.op, from: n.from, to: n.to, rk: n.rk }))));
+                            kind: n.kind, op: n.op, from: n.from, to: n.to, rk: n.rk,
+                            fxCat: n.fxCat, fxName: n.fxName, fxGlobal: n.fxGlobal }))));
     } catch (e) {}
   }
 
@@ -1145,7 +1171,14 @@
     lines.push("");
     notes.forEach((n) => {
       let line;
-      if (n.kind === "sub") {
+      if (n.rk === "fx") {
+        // 特效選單挑的:【整支】套整支;有時間點的放那個時間點(有「」以那句為準)
+        if (n.fxGlobal) line = "【整支】" + n.fxCat + ":" + n.fxName;
+        else {
+          line = "[" + n.fxCat + " " + fmt(n.t) + "] " + n.fxName;
+          if (n.line) line += "(這句:「" + n.line + "」)";
+        }
+      } else if (n.kind === "sub") {
         // 字幕改字/斷句/併句:描述本身就完整,AI 照做並用逐字稿校準時間
         line = "[" + fmt(n.t) + "] " + n.text;
       } else if (n.t2 !== undefined) {
@@ -1166,6 +1199,9 @@
     lines.push("(以上每一則,請在對應的字幕句/時間點修改。有「」的以那句字幕為準;");
     lines.push(" [剪掉 a–b] 的是這支預覽片的秒數,用 EDL 對回原始影片再剪;");
     lines.push(" 「字幕改字/斷句/併句/塗黃」的照描述改 captions.json(塗黃 = 設 hl 欄位),時間用逐字稿重算。)");
+    if (notes.some((n) => n.rk === "fx")) {
+      lines.push("(特效選單:字幕樣式→gen_captions --style;色調→grade.py preset;下標/數字卡→tools/overlay-cards.md;運鏡→SKILL 5.1。【整支】套整支,有時間點的放那個時間點。)");
+    }
     if (notes.some((n) => n.img)) {
       lines.push("(有『附畫記圖』的:圖已自動存到我的「下載」資料夾,請直接去那裡讀,不用我上傳。)");
     }
@@ -1187,6 +1223,74 @@
       a.download = "審片註解.txt"; a.click();
       showToast("剪貼簿被擋,已改成下載 審片註解.txt");
     }
+  });
+
+  // ---- 特效選單(FX picker)。只放已驗過的效果;挑了就寫進註解,貼回給 AI。----
+  const FX_CATALOG = [
+    { cat: "字幕樣式", global: true,  hint: "整支字幕的長相,挑一個。",
+      items: ["經典款", "乾淨無框", "描邊 TikTok", "霓虹", "漸層", "重點放大"] },
+    { cat: "色調",     global: true,  hint: "整支影片的色調,挑一個。",
+      items: ["暖色 親和", "冷色 專業", "明亮乾淨", "低飽和高級", "電影感"] },
+    { cat: "下標",     global: false, hint: "放在目前時間點:秀名字/頭銜(你是誰)。",
+      items: ["乾淨橫條", "膠囊", "毛玻璃"] },
+    { cat: "數字卡",   global: false, hint: "放在目前時間點:秀一個成果數字(強調重點)。",
+      items: ["實心", "毛玻璃"] },
+    { cat: "運鏡",     global: false, hint: "放在目前時間點:讓畫面動一下。",
+      items: ["推進放大(強調)", "拉遠", "平移", "縮框(吐槽)"] },
+  ];
+  const fxToggle = document.getElementById("fxtoggle");
+  const fxPanel = document.getElementById("fxpanel");
+  let fxBuilt = false;
+  function buildFxPanel() {
+    if (fxBuilt) return; fxBuilt = true;
+    FX_CATALOG.forEach((g) => {
+      const gd = document.createElement("div"); gd.className = "fxgroup";
+      const h = document.createElement("div"); h.className = "fxgh";
+      h.innerHTML = "<b>" + g.cat + (g.global ? "(整支)" : "(放這裡)") + "</b> " + g.hint;
+      gd.appendChild(h);
+      const row = document.createElement("div"); row.className = "fxrow";
+      g.items.forEach((label) => {
+        const c = document.createElement("button"); c.type = "button";
+        c.className = "fxchip"; c.textContent = label; c.dataset.cat = g.cat;
+        c.dataset.global = g.global ? "1" : "";
+        c.addEventListener("click", () => pickFx(g, label));
+        row.appendChild(c);
+      });
+      gd.appendChild(row); fxPanel.appendChild(gd);
+    });
+  }
+  function pickFx(g, label) {
+    pushUndo();
+    if (g.global) {
+      notes = notes.filter((n) => !(n.rk === "fx" && n.fxGlobal && n.fxCat === g.cat));
+      notes.push({ id: Date.now() + Math.random(), t: 0, rk: "fx", fxGlobal: true,
+                   fxCat: g.cat, fxName: label, text: g.cat + ":" + label });
+      showToast("整支" + g.cat + "設為「" + label + "」");
+    } else {
+      const t = frozen !== null ? frozen : (video.currentTime || 0);
+      const note = { id: Date.now() + Math.random(), t: t, rk: "fx",
+                     fxCat: g.cat, fxName: label, text: g.cat + ":" + label };
+      const ln = subLineFor(t); if (ln) note.line = ln.text;
+      notes.push(note);
+      showToast(g.cat + "「" + label + "」加在 " + fmt(t));
+    }
+    notes.sort((a, b) => a.t - b.t);
+    renderNotes(); updateFxActive();
+  }
+  function updateFxActive() {
+    if (!fxBuilt) return;
+    fxPanel.querySelectorAll(".fxchip").forEach((c) => {
+      if (!c.dataset.global) return;
+      c.classList.toggle("on", notes.some((n) => n.rk === "fx" && n.fxGlobal &&
+        n.fxCat === c.dataset.cat && n.fxName === c.textContent));
+    });
+  }
+  fxToggle.addEventListener("click", () => {
+    const show = fxPanel.style.display === "none";
+    buildFxPanel();
+    fxPanel.style.display = show ? "block" : "none";
+    fxToggle.classList.toggle("on", show);
+    if (show) updateFxActive();
   });
 
   let toastTimer = null;

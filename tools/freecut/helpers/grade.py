@@ -46,9 +46,20 @@ PRESETS: dict[str, str] = {
         "curves=master='0/0 0.25/0.23 0.75/0.77 1/1'"
     ),
 
-    # OPT-IN creative preset for retro/cinematic looks ONLY. Not a default.
+    # ---- 學員可挑的風格款(creative looks)。都在真影片上驗過。白話說明見 PRESET_INFO。 ----
+    "warm": (  # 暖色:膚色偏金黃、親和、生活感
+        "eq=contrast=1.04:brightness=0.01:saturation=1.12,"
+        "colorbalance=rm=0.04:gm=0.01:bm=-0.03:rh=0.06:bh=-0.05"
+    ),
+    "cool": (  # 冷色:偏藍、乾淨、專業
+        "eq=contrast=1.06:saturation=0.96,"
+        "colorbalance=rs=-0.05:bs=0.07:rm=-0.04:bm=0.05:rh=-0.06:bh=0.07"
+    ),
+    "clean": "eq=contrast=1.07:brightness=0.03:saturation=1.10",  # 明亮乾淨:短影音最常見
+    "muted": "eq=contrast=0.99:brightness=0.02:saturation=0.74",  # 低飽和高級感:霧面、克制
+
+    # OPT-IN creative preset for retro/cinematic looks. 學員面叫「電影感」(見下方 cinematic 別名)。
     # +12% contrast, crushed blacks, -12% sat, warm shadows + cool highs, filmic curve.
-    # Originally from HEURISTICS §6 — too aggressive for standard launch content.
     "warm_cinematic": (
         "eq=contrast=1.12:brightness=-0.02:saturation=0.88,"
         "colorbalance="
@@ -60,6 +71,18 @@ PRESETS: dict[str, str] = {
 
     # Flat — no grade. Useful as a sentinel for "skip grading this source".
     "none": "",
+}
+# 學員面的名字:cinematic = warm_cinematic(同一組濾鏡,課堂講「電影感」)。
+PRESETS["cinematic"] = PRESETS["warm_cinematic"]
+
+# 每個風格的白話說明 —— 給 AI 用學員聽得懂的話介紹(這是什麼 / 什麼時候用)。--list-presets 會印。
+PRESET_INFO: dict[str, str] = {
+    "warm":          "暖色 — 膚色偏金黃、親和、有生活感。適合:日常、教學、親切口吻。",
+    "cool":          "冷色 — 偏藍、乾淨、專業。適合:商業、專業、冷靜主題。",
+    "clean":         "明亮乾淨 — 更亮更有勁,短影音最常見。適合:想要清爽有精神。",
+    "muted":         "低飽和高級感 — 降飽和、霧面、克制。適合:質感、精品、沉穩主題。",
+    "cinematic":     "電影感 — 高對比、冷暖分離、壓黑,有故事感。適合:故事、轉變、戲劇化。",
+    "neutral_punch": "自然微調 — 幾乎看不出來,只是乾淨一點。適合:不想有明顯風格時。",
 }
 
 
@@ -329,7 +352,8 @@ def main() -> None:
 
     if args.list_presets:
         for name, f in PRESETS.items():
-            print(f"{name}:")
+            info = PRESET_INFO.get(name)
+            print(f"{name}:" + (f"  — {info}" if info else ""))
             print(f"  {f}" if f else "  (no filter)")
             print()
         return

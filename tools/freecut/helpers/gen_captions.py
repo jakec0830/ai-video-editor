@@ -41,6 +41,30 @@ FONTS = {
     "黑體": {"families": ["PingFang TC", "Microsoft JhengHei"], "weight": 700},
 }
 
+# 字幕樣式(可選)。classic = 現行預設,不加 --style 就跟以前一模一樣。
+# 其餘是給學員挑的變化款,全部純 CSS、直式原生、不需下載任何 block。
+# hl 關鍵字:多數款塗黃,emphasis 款則把關鍵字放大。
+STYLES = {
+    "classic":  {"label": "經典款(黑框)",
+                 "inner": "display:inline-block; padding:10px 26px; border-radius:14px; background:rgba(0,0,0,0.72); box-shadow:0 4px 18px rgba(0,0,0,0.35); -webkit-box-decoration-break:clone; box-decoration-break:clone;",
+                 "kw": "color:#FFD400;"},
+    "clean":    {"label": "乾淨無框粗體",
+                 "inner": "display:inline-block; font-weight:800; text-shadow:0 3px 14px rgba(0,0,0,0.85),0 1px 2px rgba(0,0,0,0.9);",
+                 "kw": "color:#FFD400;"},
+    "outline":  {"label": "描邊款(TikTok)",
+                 "inner": "display:inline-block; font-weight:800; -webkit-text-stroke:7px #000; paint-order:stroke fill;",
+                 "kw": "color:#FFD400;"},
+    "neon":     {"label": "霓虹發光",
+                 "inner": "display:inline-block; font-weight:800; color:#eafcff; text-shadow:0 0 8px #00e5ff,0 0 22px #00b4ff,0 0 40px #0077ff;",
+                 "kw": "color:#fff;"},
+    "gradient": {"label": "漸層填色",
+                 "inner": "display:inline-block; font-weight:900; background:linear-gradient(92deg,#ffd36e,#ff5e9c 55%,#8a6bff); -webkit-background-clip:text; background-clip:text; color:transparent; filter:drop-shadow(0 3px 10px rgba(0,0,0,0.6));",
+                 "kw": "-webkit-text-fill-color:#fff;"},
+    "emphasis": {"label": "重點放大(關鍵字放大)",
+                 "inner": "display:inline-block; font-weight:700; text-shadow:0 3px 12px rgba(0,0,0,0.8);",
+                 "kw": "font-size:1.4em; font-weight:900; color:#ffd400; vertical-align:-0.06em;"},
+}
+
 
 def hl_html(text: str, hl: str | None) -> str:
     t = html.escape(text)
@@ -52,8 +76,15 @@ def hl_html(text: str, hl: str | None) -> str:
 
 
 def build(captions: list[dict], video: str, w: int, h: int,
-          duration: float, font_key: str) -> str:
+          duration: float, font_key: str, style_key: str = "classic") -> str:
     f = FONTS[font_key]
+    st = STYLES[style_key]
+    st_inner, st_kw = st["inner"], st["kw"]
+    # Instagram Reels 安全區。螢幕尺寸 / IG 版本會變動,用比例算不綁單一機型。
+    # 數值對齊公開規格(1080x1920):上 ~220px、下 ~450px(UI 蓋住)、右 ~100px(按鈕欄)、左 ~50px。
+    # 上=標題列 下=帳號+字幕+音軌+進度條 右=按鈕欄 左=留白。要微調就改這四個係數。
+    sz_top, sz_bottom = round(h * 0.115), round(h * 0.235)
+    sz_left, sz_right = round(w * 0.05), round(w * 0.11)
     # 每個平台家族各一條 @font-face(宣告本身就能擋 renderer fallback 成通用字型),
     # font-family 全部列上 — 哪個平台裝了哪個,瀏覽器自己挑得到。
     font_faces = "\n".join(
@@ -84,22 +115,27 @@ def build(captions: list[dict], video: str, w: int, h: int,
 {font_faces}
       * {{ margin:0; padding:0; box-sizing:border-box; }}
       html, body {{ width:{w}px; height:{h}px; overflow:hidden; background:#000; }}
-      #root {{ position:absolute; inset:0; }}
+      #root {{
+        position:absolute; inset:0;
+        /* Instagram Reels 安全區(可調)。重要元素別進下 ~450px(帳號/字幕/進度條)
+           與右 ~100px(按鈕欄);螢幕/版本會變,故取保守值。 */
+        --safe-top:{sz_top}px; --safe-bottom:{sz_bottom}px;
+        --safe-left:{sz_left}px; --safe-right:{sz_right}px;
+      }}
 
       /* subtitles: white text on a black box. z-index MUST beat the a-roll
-         (a-roll is z-index:1) or captions render behind the video and vanish. */
+         (a-roll is z-index:1) or captions render behind the video and vanish.
+         bottom 用安全區下緣,才不會被 IG 帳號/字幕/進度條蓋到;
+         max-width 兩側各清出按鈕欄寬度(取較大的 right,置中對稱)。 */
       .sub {{
-        position:absolute; left:50%; bottom:230px; transform:translateX(-50%);
-        width:auto; max-width:{int(w*0.86)}px; text-align:center; z-index:20;
+        position:absolute; left:50%; bottom:var(--safe-bottom); transform:translateX(-50%);
+        width:auto; max-width:calc(100% - 2*var(--safe-right)); text-align:center; z-index:20;
         font-family:{fam_stack},sans-serif; font-weight:{f["weight"]};
         font-size:56px; line-height:1.32; color:#fff; white-space:nowrap;
       }}
-      .sub-inner {{
-        display:inline-block; padding:10px 26px; border-radius:14px;
-        background:rgba(0,0,0,0.72); box-shadow:0 4px 18px rgba(0,0,0,0.35);
-        -webkit-box-decoration-break:clone; box-decoration-break:clone;
-      }}
-      .kw {{ color:#FFD400; }}   /* keyword highlight — colour only, never a different font */
+      /* 樣式 = {style_key}。sub-inner / kw 由 STYLES 決定;定位與安全區在 .sub。 */
+      .sub-inner {{ {st_inner} }}
+      .kw {{ {st_kw} }}   /* keyword highlight（樣式決定顏色/大小） */
 
       /* ==== CREATIVE LAYER styles: add your title-card / sprite / b-roll / callout CSS here ==== */
 
@@ -122,7 +158,16 @@ def build(captions: list[dict], video: str, w: int, h: int,
              - b-roll <video> is its OWN clip (never nested in a timed <div>); unique id; muted
              - overlays that must sit above the video need z-index > 1 (subtitles use 20; keep captions on top)
              - camera moves = GSAP transform on #a-roll (transform-origin ~ "50% 42%" for a centred face)
+             - IG 安全區:字卡 / callout / logo / lower-third 一律放進安全區內,用
+               var(--safe-top/bottom/left/right)。重要元素別進下 ~450px(帳號/字幕/進度條)與右 ~100px(按鈕欄)。
            Add elements here. -->
+
+      <!-- 安全區參考框:要檢查位置時把下面這段的註解打開(render 前記得再註解回去)。
+      <div class="clip" data-start="0" data-duration="{duration}" data-track-index="98"
+           style="position:absolute; top:var(--safe-top); bottom:var(--safe-bottom);
+                  left:var(--safe-left); right:var(--safe-right);
+                  border:2px dashed rgba(0,255,0,.6); z-index:90; pointer-events:none;"></div>
+      -->
 
       <!-- subtitles -->
 {subs_html}
@@ -155,6 +200,8 @@ def main() -> None:
     ap.add_argument("--h", type=int, default=1920)
     ap.add_argument("--duration", type=float, required=True, help="ffprobe duration of the a-roll")
     ap.add_argument("--font", choices=list(FONTS), default="宋體")
+    ap.add_argument("--style", choices=list(STYLES), default="classic",
+                    help="字幕樣式:classic(預設) / clean / outline / neon / gradient / emphasis")
     ap.add_argument("-o", "--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -164,9 +211,9 @@ def main() -> None:
     if not isinstance(captions, list) or not captions:
         sys.exit("captions JSON must be a non-empty list of {start,end,text}")
 
-    html_out = build(captions, args.video, args.w, args.h, args.duration, args.font)
+    html_out = build(captions, args.video, args.w, args.h, args.duration, args.font, args.style)
     args.out.write_text(html_out, encoding="utf-8")
-    print(f"wrote {args.out}  ({len(captions)} subtitles, font={args.font})")
+    print(f"wrote {args.out}  ({len(captions)} subtitles, font={args.font}, style={args.style})")
     print("next: add creative layers in the marked slots → npx hyperframes lint → render")
 
 
