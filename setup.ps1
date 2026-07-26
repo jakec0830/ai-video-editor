@@ -143,6 +143,41 @@ foreach ($f in @("LICENSE",".gitignore","setup.sh","setup.ps1","scripts","tools"
   }
 }
 
+# --- 7. 把「要告知使用者的話」寫成檔案(這份刻意不藏)------------------------
+# 為什麼要寫成檔案:下面那段收尾訊息是印在 PowerShell 視窗的,但這個工具包的前提是
+# 「使用者不開終端機,所有指令由 AI 跑」— 所以那幾段話學員其實看不到,除非 AI 記得
+# 轉述,而 SKILL.md 只叫 AI「看 exit code」。實測炸過:AI 看到成功就自己改寫成摘要,
+# 「檔案被藏起來」沒轉達,學員打開檔案總管發現檔案不見,以為裝壞了。
+$note = Join-Path $KIT "安裝完成說明.md"
+@"
+# 安裝完成說明
+
+（這份由 setup 自動產生，每次重跑會更新。看完可以直接刪，不影響功能。）
+
+## 狀態：[OK] 裝好了，可以開始剪片了
+
+### 接下來 3 步
+
+1. 用 Claude Code 打開這個資料夾（Select folder 選 ai-video-editor 本身）
+2. 開新對話，把你的口播影片拖進來
+3. 打一句：幫我剪這支影片
+
+## 資料夾裡少了幾個檔案是正常的
+
+setup 會把工具包內部運作用的檔案（``tools\``、``scripts\``、``setup.sh``、
+``setup.ps1``、``CLAUDE.md``、``LICENSE``）在檔案總管裡隱藏起來，
+讓你打開這個資料夾只看到會用到的東西。**功能完全不受影響**，只是不顯示而已。
+
+想看回來：
+
+- Windows：檔案總管「檢視」→「顯示」→ 勾「隱藏的項目」
+- Mac：按 ``Cmd + Shift + .``（句點）
+
+## 卡住的話
+
+直接問 AI，或看 ``README.md``。想找真人：LINE 官方帳號 @headhomeuni
+"@ | Set-Content -Path $note -Encoding UTF8
+
 Write-Host "`n==============================" -ForegroundColor Green
 Write-Host "   [ OK ] 裝好了,可以開始剪片了" -ForegroundColor Green
 Write-Host "==============================`n" -ForegroundColor Green
@@ -153,3 +188,7 @@ Write-Host "  3. 打一句:幫我剪這支影片`n"
 Write-Host "看到上面綠色的 [ OK ] 橫幅就是「裝好了」的訊號。詳見 README.md 或直接問 AI。"
 Write-Host "(資料夾裡少了幾個檔案是正常的 — 內部運作用的檔案被藏起來了,不影響功能;"
 Write-Host " 檔案總管 → 檢視 → 顯示 → 隱藏的項目 可以隨時看到它們。)"
+Write-Host ""
+Write-Host "★ 給跑這支腳本的 AI:上面這段是寫給「使用者」看的,不是給你判斷用的。"
+Write-Host "  同樣的內容已寫進 $note — 請把它的內容轉述給使用者,"
+Write-Host "  特別是「檔案被藏起來是正常的」那段。只回報成功不算交代完。"

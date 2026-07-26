@@ -182,6 +182,50 @@ elif command -v attrib >/dev/null 2>&1; then
 fi
 # Linux 檔案總管沒有統一的隱藏機制，跳過（不影響功能，只差在看不看得到而已）。
 
+# --- 6. 把「要告知使用者的話」寫成檔案（這份刻意不隱藏）---------------------
+# 為什麼要寫成檔案:下面那段收尾訊息是印在終端機的,但這個工具包的前提是
+# 「使用者不開終端機,所有指令由 AI 跑」— 所以那幾段話學員其實一個字都看不到,
+# 除非 AI 記得轉述,而 SKILL.md 只叫 AI「看 exit code」。實測炸過:AI 看到
+# exit code 0 就自己改寫成摘要,綠色 ✅ 跟「檔案被藏起來」兩件都沒轉達,
+# 學員打開 Finder 發現檔案不見,以為裝壞了。寫成檔案就不必依賴 AI 的記性。
+NOTE="$KIT/安裝完成說明.md"
+{
+  echo "# 安裝完成說明"
+  echo ""
+  echo "（這份由 setup 自動產生，每次重跑會更新。看完可以直接刪，不影響功能。）"
+  echo ""
+  if [ -n "$MISSING" ]; then
+    echo "## 狀態：還沒完成 — 缺:$MISSING"
+    echo ""
+    echo "缺的東西要裝好，不然一開始剪片就會出錯。"
+    echo "最簡單的做法：用 Claude Code 打開這個資料夾，跟它說「幫我一步一步安裝設定」，"
+    echo "它會照清單一個一個幫你補，補完會再跑一次這支確認。"
+  else
+    echo "## 狀態：✅ 裝好了，可以開始剪片了"
+    echo ""
+    echo "### 接下來 3 步"
+    echo ""
+    echo "1. 用 Claude Code 打開這個資料夾（Select folder 選 ai-video-editor 本身）"
+    echo "2. 開新對話，把你的口播影片拖進來"
+    echo "3. 打一句：幫我剪這支影片"
+  fi
+  echo ""
+  echo "## 資料夾裡少了幾個檔案是正常的"
+  echo ""
+  echo "setup 會把工具包內部運作用的檔案（\`tools/\`、\`scripts/\`、\`setup.sh\`、"
+  echo "\`setup.ps1\`、\`CLAUDE.md\`、\`LICENSE\`）在 Finder／檔案總管裡隱藏起來，"
+  echo "讓你打開這個資料夾只看到會用到的東西。**功能完全不受影響**，只是不顯示而已。"
+  echo ""
+  echo "想看回來："
+  echo ""
+  echo "- Mac：按 \`Cmd + Shift + .\`（句點）"
+  echo "- Windows：檔案總管「檢視」→ 勾「隱藏的項目」"
+  echo ""
+  echo "## 卡住的話"
+  echo ""
+  echo "直接問 AI，或看 \`README.md\`。想找真人：LINE 官方帳號 @headhomeuni"
+} > "$NOTE" 2>/dev/null
+
 echo ""
 if [ "$PATH_HINT" = "1" ] && [ "$UNAME" = "Darwin" ]; then   # .zshenv 是 Mac 的建議,別讓 Windows Git-Bash 使用者看到
   echo "--- PATH 設定(重要)---"
@@ -205,6 +249,8 @@ if [ -n "$MISSING" ]; then
   echo "它會照上面的清單一個一個幫你補,補完會再跑一次這支確認。"
   echo "(資料夾裡少了幾個檔案是正常的 — setup.sh 把工具包內部運作用的檔案藏起來了,"
   echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"
+  echo ""
+  echo "★ 給跑這支腳本的 AI:同樣的內容已寫進 $NOTE,請轉述給使用者。"
   exit 1
 fi
 echo "✅ ============================== ✅"
@@ -219,3 +265,7 @@ echo ""
 echo "看到上面這段綠色 ✅ 就是「裝好了」的訊號。詳見 README.md 或直接問 AI。"
 echo "(資料夾裡少了幾個檔案是正常的 — setup.sh 把工具包內部運作用的檔案藏起來了,"
 echo " 不影響任何功能;Finder/檔案總管開隱藏檔案的快速鍵可以隨時看到它們。)"
+echo ""
+echo "★ 給跑這支腳本的 AI:上面這段是寫給「使用者」看的,不是給你判斷用的。"
+echo "  同樣的內容已經寫進 $NOTE — 請把它的內容轉述給使用者,"
+echo "  特別是「檔案被藏起來是正常的」那段。只回報 exit code 不算交代完。"

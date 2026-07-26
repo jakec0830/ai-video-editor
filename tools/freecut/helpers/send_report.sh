@@ -35,16 +35,33 @@ if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
   echo "用法: send_report.sh --name <學員名> --project <專案> --type <類型> --content-file <檔案> [--env <環境>]"
   exit 3
 fi
+
+# 類型白名單。表單那題是單選,送一個不在選項裡的值,Google 會直接回 HTTP 400 退件。
+# 而這支腳本刻意「送不出去也不報錯」(不該卡住新手),所以不合法的值會變成**靜默失敗** —
+# 實測炸過:SKILL.md 叫 AI 用「安裝紀錄」,但表單沒有這個選項,於是每一台新機器的
+# 安裝紀錄都送不出去,課程團隊那邊卻是一片空白,還以為沒消息就是好消息。
+# 修法:不在清單裡的一律降級成「其他」,並把原始類型寫進內文開頭,語意不會掉。
+# 以後 SKILL.md 再新增類型也不會靜默失敗。
+VALID_TYPES="復盤 錯誤回報 功能建議 其他"
+ORIG_TYPE="$TYPE"
+case " $VALID_TYPES " in
+  *" $TYPE "*) ;;
+  *) TYPE="其他" ;;
+esac
 [ -z "$ENVINFO" ] && ENVINFO="$(uname -sm) · node $(node --version 2>/dev/null || echo '?') · $(sw_vers -productVersion 2>/dev/null || echo '')"
 
 # 洗掉電腦帳號名稱(唯一會夾帶的個資,通常藏在路徑裡)。送的是這份洗過的副本,不動原檔。
 SCRUBBED="$(mktemp -t freecut_report.XXXXXX)"
 trap 'rm -f "$SCRUBBED"' EXIT
 UNAME_USER="$(id -un 2>/dev/null || whoami 2>/dev/null || echo user)"
-sed -e "s#${HOME}#~#g" \
-    -e "s#/Users/${UNAME_USER}#/Users/USER#g" \
-    -e "s#/home/${UNAME_USER}#/home/USER#g" \
-    "$FILE" > "$SCRUBBED"
+{
+  # 類型被降級的話,把原始類型記在內文開頭,課程團隊還是分得出這份是什麼。
+  [ "$ORIG_TYPE" != "$TYPE" ] && printf '【原始類型:%s(表單無此選項,已降級為 %s)】\n\n' "$ORIG_TYPE" "$TYPE"
+  sed -e "s#${HOME}#~#g" \
+      -e "s#/Users/${UNAME_USER}#/Users/USER#g" \
+      -e "s#/home/${UNAME_USER}#/home/USER#g" \
+      "$FILE"
+} > "$SCRUBBED"
 
 HTTP_CODE=$(curl -sS --max-time 20 -o /dev/null -w "%{http_code}" \
   --data-urlencode "${E_NAME}=${NAME:-未填}" \
@@ -55,7 +72,11 @@ HTTP_CODE=$(curl -sS --max-time 20 -o /dev/null -w "%{http_code}" \
   "$FORM_URL" 2>/dev/null)
 
 if [ "$HTTP_CODE" = "200" ]; then
-  echo "已回傳給課程團隊(${TYPE})。"
+  if [ "$ORIG_TYPE" != "$TYPE" ]; then
+    echo "已回傳給課程團隊(${ORIG_TYPE} → 表單無此選項,以「${TYPE}」送出,原始類型已記在內文)。"
+  else
+    echo "已回傳給課程團隊(${TYPE})。"
+  fi
 else
   echo "回傳沒成功(HTTP ${HTTP_CODE:-無回應})— 沒關係,檔案還在,之後可以用 LINE 傳。"
 fi

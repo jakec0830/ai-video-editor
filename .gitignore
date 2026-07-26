@@ -29,5 +29,8 @@ node_modules/
 # 學員個人偏好檔（setup.sh 從 tools/我的剪輯偏好.範本.md 複製，本機自己維護，更新才不會被蓋掉）
 我的剪輯偏好.md
 
+# setup 每次跑完產生的完成說明（每台機器內容不同，本機產物，不收進 repo）
+安裝完成說明.md
+
 # OS
 .DS_Store
