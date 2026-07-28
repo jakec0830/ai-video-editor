@@ -11,6 +11,17 @@ Flags:
             (likely repeated words collapsed, or dead air stuck on the word end)
   LONG    — word duration is abnormally long for its character count
             (a short word holding a long timestamp = suspicious)
+  FILLER  — a 1-2 char token whose ACTUAL sound is short and sits alone in silence
+            (long silence both before and after). Whisper turns "um / 呃" into a real
+            word — verified: a 0.28s filler at 12.87 came out as the word 你, and the
+            speaker never said 你 at all. Nothing downstream can tell: it looks like a
+            perfectly normal word in the transcript. Check these by ear before you cut,
+            and never build a hook on one.
+  SNAP    — a short loud transient (finger snap / clap / tap) sitting in a silence with
+            no word on it. The default silence pass treats it as noise and drops it, so
+            it is invisible everywhere else — and then a cut removes it and the user
+            says "you deleted my finger snap". Effects that must land on such a sound
+            take their timing from here, never from word timings.
   GAP     — a wide space BETWEEN two transcript words that is mostly NOT silence,
             i.e. there is audible speech the transcript has no word for. This is the
             classic Whisper blind spot: a half-said word / false start / repeat that
@@ -21,6 +32,10 @@ Flags:
 Usage: python3 xref_silence.py <video> <transcript.json> [--noise -30] [--gap 0.30]
 """
 import argparse, json, subprocess, re, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sound_map import pcm, envelope, find_transients, WIN   # 同一個資料夾
 
 def mean_volume(video):
     """This file's own average loudness (dBFS), via ffmpeg volumedetect.
@@ -61,6 +76,14 @@ def main():
                          "file's mean_volume + --gap-offset, so it adapts to how loud/noisy the "
                          "recording is (a fixed dB floods a noisy file and misses a quiet one). "
                          "Pass a number (e.g. -35) to force an absolute threshold.")
+    ap.add_argument("--filler-sound", type=float, default=0.35,
+                    help="FILLER:實際發聲短於這個秒數才算(預設 0.35s)")
+    ap.add_argument("--filler-before", type=float, default=0.25,
+                    help="FILLER:發聲前要有這麼久的安靜(預設 0.25s)")
+    ap.add_argument("--filler-after", type=float, default=0.35,
+                    help="FILLER:發聲後要有這麼久的安靜(預設 0.35s)")
+    ap.add_argument("--no-snap", action="store_true",
+                    help="不要掃爆音(彈指/拍手)。預設會掃。")
     ap.add_argument("--gap-offset", type=float, default=6.0,
                     help="dB above this file's mean_volume for the 'auto' GAP threshold "
                          "(default 6). Calibrated on 2 clips (sonnet -41.3→-35.3, demo "
@@ -88,7 +111,50 @@ def main():
                 cov += hi - lo
         return cov
 
+    def voiced_spans(s0, e0, windows):
+        """[s0,e0] 內扣掉安靜之後,實際有聲音的區段。"""
+        cuts = sorted((max(s0, ss), min(e0, se)) for ss, se in windows
+                      if min(e0, se) > max(s0, ss))
+        out, cur = [], s0
+        for ss, se in cuts:
+            if ss > cur:
+                out.append((cur, ss))
+            cur = max(cur, se)
+        if cur < e0:
+            out.append((cur, e0))
+        return out
+
+    def silence_run(t, windows, back):
+        """t 這個時間點往前(back=True)或往後,連著多久是安靜。"""
+        for ss, se in windows:
+            if back and abs(se - t) < 0.12:
+                return se - ss
+            if not back and abs(ss - t) < 0.12:
+                return se - ss
+        return 0.0
+
     flags = []
+    # FILLER:1-2 字的 token,實際只發了一小段音,而且前後都是長靜音 →
+    # 幾乎都是 um/呃 被 Whisper 當成一個字(實測「你」就是這樣來的)。
+    for w in words:
+        t = w["text"]
+        nch = len(re.sub(r"[^\w]", "", t)) or 1
+        if nch > 2:
+            continue
+        vs = voiced_spans(w["start"] - 0.10, w["end"] + 0.10, sils_gap)
+        if not vs:
+            continue
+        v0, v1 = vs[0][0], vs[-1][1]
+        total = sum(b - a2 for a2, b in vs)
+        if total > a.filler_sound:
+            continue
+        before = silence_run(v0, sils_gap, True)
+        after = silence_run(v1, sils_gap, False)
+        if before >= a.filler_before and after >= a.filler_after:
+            flags.append((w["start"], w["end"], t, "FILLER",
+                          f"實際只發聲 {total:.2f}s({v0:.2f}-{v1:.2f}),"
+                          f"前靜 {before:.2f}s / 後靜 {after:.2f}s — 可能是 um/呃 被聽成字"))
+
     # GAP: audible speech BETWEEN two transcript words with no word token for it.
     for w1, w2 in zip(words, words[1:]):
         gs, ge = w1["end"], w2["start"]
@@ -115,10 +181,42 @@ def main():
         if dur / nchars > a.long and dur > 0.6:
             flags.append((s, e, t, "LONG", f"{dur:.2f}s for {nchars} char(s) = {dur/nchars:.2f}s/char"))
 
+    if not a.no_snap:
+        dur_total = max((w["end"] for w in words), default=0) + 2.0
+        env = envelope(pcm(a.video, 0.0, dur_total))
+        if env:
+            q = sorted(env)
+            floor_db = q[max(0, int(len(q) * 0.10) - 1)]
+            loud = [v > floor_db + 8 for v in env]
+            segs, i2, n2 = [], 0, len(loud)
+            while i2 < n2:
+                if not loud[i2]:
+                    i2 += 1
+                    continue
+                j2 = i2
+                while j2 < n2 and loud[j2]:
+                    j2 += 1
+                if (j2 - i2) * WIN >= 0.04:
+                    segs.append([i2, j2])
+                i2 = j2
+            for t_s, rise, peak in find_transients(env, floor_db, 8.0, 0.05, 0.0, segs):
+                # ★ 判準是「它周圍大部分是安靜」。兩個更直覺的判準都試過、都失敗:
+                #   ① 用「有沒有字蓋住」→ Whisper 常把 token 拉長橫跨整段靜音
+                #     (彈指就被「變」31.14-32.06 蓋住),要找的東西直接被濾掉。
+                #   ② 用「落在某個靜音窗裡」→ 爆音自己會把靜音切成兩半
+                #     (31.23-31.57 + 31.57-32.00),它剛好卡在兩窗中間的縫隙。
+                if _overlap(t_s - 0.30, t_s + 0.30, sils) < 0.35:
+                    continue
+                flags.append((t_s, t_s + 0.03, "(無字)", "SNAP",
+                              f"短促爆音,比附近背景高 {rise:.1f}dB — 彈指/拍手之類,"
+                              f"逐字稿沒有它,預設靜音門檻也看不到"))
+
     flags.sort(key=lambda f: f[0])
-    ngap = sum(1 for f in flags if f[3] == "GAP")
+    kinds = {k: sum(1 for f in flags if f[3] == k)
+             for k in ("GAP", "FILLER", "SNAP")}
     print(f"words: {len(words)}  silence gaps>=100ms: {len(sils)}  "
-          f"flags: {len(flags)} ({ngap} GAP)")
+          f"flags: {len(flags)} ("
+          + ", ".join(f"{v} {k}" for k, v in kinds.items() if v) + ")")
     print(f"GAP threshold: {gap_noise}dB [{gap_src}]\n")
     if not flags:
         print("No transcript/audio disagreements. First cut can trust the transcript timing.")
@@ -127,6 +225,14 @@ def main():
     print("-" * 82)
     for s, e, t, kind, detail in flags:
         print(f"{s:7.2f}-{e:6.2f}  {kind:6} {t:12} {detail}")
+    if kinds["FILLER"]:
+        print("\n→ FILLER: 這個 token 很可能不是字,是 um/呃。剪之前先聽,"
+              "**絕對不要把鉤子或第一句建在它上面**(實測:一個 0.28s 的 um 被聽成「你」,"
+              "整支影片開頭就卡著一個氣音)。確定是贅字就整個剪掉。")
+    if kinds["SNAP"]:
+        print("\n→ SNAP: 這裡有聲音但逐字稿沒有,而且是短促爆音(彈指/拍手/敲桌)。"
+              "**剪的時候不要當成靜音修掉** — 使用者會發現「我的彈指不見了」。"
+              "要對特效/音效就用這個秒數,不要用逐字稿推算。")
     print("\n→ MERGE / LONG: generate a zoomed waveform (timeline_view.py) + split_blobs "
           "and place cuts on the visible silence, NOT the word timing.")
     print("→ GAP: there is speech here with no transcript word. Pull the waveform and "
