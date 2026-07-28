@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -87,6 +88,17 @@ def build(captions: list[dict], video: str, w: int, h: int,
     # 數值對齊公開規格(1080x1920):上 ~220px、下 ~450px(UI 蓋住)、右 ~100px(按鈕欄)、左 ~50px。
     # 上=標題列 下=帳號+字幕+音軌+進度條 右=按鈕欄 左=留白。要微調就改這四個係數。
     sz_top, sz_bottom = round(h * 0.115), round(h * 0.235)
+
+    # ★ 安全區只在「用預設值」時保護得到。使用者說「字幕再低一點」而你直接照做,
+    # 字幕會安靜地跑進 IG 的介面區(帳號列/進度條會蓋住),而且**在電腦上預覽完全
+    # 看不出來** — 要等發到 IG 才發現。所以覆蓋安全區時一定要出聲。
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)px\s*", sub_bottom or "")
+    if m and float(m.group(1)) < sz_bottom:
+        print(f"⚠ 字幕底部設在 {m.group(1)}px,低於 IG Reels 安全區下緣 {sz_bottom}px。\n"
+              f"  發 IG Reels 的話,字幕可能被帳號名稱/字幕列/進度條蓋到"
+              f"(電腦上預覽看不出來)。\n"
+              f"  發別的平台通常沒差。要貼回安全區就用 --sub-bottom {sz_bottom}px。",
+              file=sys.stderr)
     sz_left, sz_right = round(w * 0.05), round(w * 0.11)
     # 每個平台家族各一條 @font-face(宣告本身就能擋 renderer fallback 成通用字型),
     # font-family 全部列上 — 哪個平台裝了哪個,瀏覽器自己挑得到。
