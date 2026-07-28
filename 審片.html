@@ -51,6 +51,9 @@
     border: 1px solid #3a4456; border-radius: 4px; padding: 0 4px; margin-left: 5px;
   }
   .time { font-variant-numeric: tabular-nums; font-size: 13px; color: #aab2c2; min-width: 96px; }
+  /* 改字幕的操作提示:接在最上面那條快捷鍵後面,自己一行(動作在右邊字幕列表上做)。
+     注意不要塞進 .controls — 那是三欄 grid,多一個子元素會把整個版面錯開一格。 */
+  .hint-sub { display: block; margin-top: 3px; color: #6f7789; }
   input[type=range].scrub { flex: 1; accent-color: #f5c542; }
 
   /* note composer (now lives in the right column) */
@@ -271,7 +274,9 @@
     <h1>審片</h1>
     <button class="filebtn" id="pick">＋ 加入檔案(影片 + 字幕)</button>
     <input type="file" id="file" accept="video/*,.json,.srt,.vtt" multiple hidden />
-    <span class="hint">空白鍵 播放/暫停 · ←→ 前後1秒 · ,。前後1幀 · Ctrl+Z 上一步 · 想改的地方暫停 → 打註解 → Enter · 最後「複製全部」貼回 Claude</span>
+    <span class="hint">空白鍵 播放/暫停 · ←→ 前後1秒 · ,。前後1幀 · Ctrl+Z 上一步 · 想改的地方暫停 → 打註解 → Enter · 最後「複製全部」貼回 Claude
+      <span class="hint-sub">改字幕(在右邊那排句子上):雙擊改錯字 · 「/」斷句 · 選取那個詞就能塗黃 · 「併下句」合併</span>
+    </span>
   </header>
 
   <main>
@@ -343,8 +348,7 @@
           <span class="anchor-line" id="anchorline" style="display:none"></span>
           <span class="small" id="stamphint">← 註解會標在這個時間點(暫停/拖時間軸來選)</span>
         </div>
-        <div class="cuthint">剪接:拖區間條選「幾秒到幾秒」→「剪掉這段」 · 字幕:雙擊句子改錯字,「/」斷句,【詞】塗黃,滑過按「併下句」 · 標位置:畫筆(P)在畫面上圈</div>
-        <div class="cuthint" style="color:#c8a45a">同一個地方改了兩次還是不對?把那句<b>原本講的話一字不漏打出來</b>(包含講錯、重複、講一半的字),AI 才看得到你耳朵聽到、但它逐字稿裡沒有的東西。</div>
+        <div class="cuthint">剪接:拖區間條選「幾秒到幾秒」→「剪掉這段」 · 標位置:畫筆(P)在畫面上圈</div>
         <div class="compose-input">
           <textarea id="note" placeholder="打你想改的地方… 例如:這裡字幕蓋到臉 / 這段太鬆剪掉一點 / 這裡推進放大"></textarea>
           <button class="addbtn" id="add" disabled>加註解</button>
