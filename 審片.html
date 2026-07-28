@@ -414,6 +414,7 @@
           end: +(c.end ?? (c.start ?? 0) + 2),
           text: String(c.text ?? c.word ?? "").trim(),
           hl: c.hl ? String(c.hl) : undefined,   // 關鍵字塗黃(成品同款),預覽照樣顯示
+          hl_color: c.hl_color ? String(c.hl_color) : undefined,  // 指定顏色時蓋掉預設的黃(例:講「藍色」就染藍)
         })).filter((c) => c.text);
       } catch (e) { return []; }
     }
@@ -728,7 +729,7 @@
         const i2 = s.text.indexOf(s.hl);
         stxEl.appendChild(document.createTextNode(s.text.slice(0, i2)));
         const kw = document.createElement("span");
-        kw.style.color = "#FFD400"; kw.textContent = s.hl;
+        kw.style.color = s.hl_color || "#FFD400"; kw.textContent = s.hl;
         stxEl.appendChild(kw);
         stxEl.appendChild(document.createTextNode(s.text.slice(i2 + s.hl.length)));
       } else {
@@ -837,7 +838,13 @@
     if (video.paused) video.play(); else video.pause();
   }
   playpause.addEventListener("click", togglePlay);
-  video.addEventListener("play", () => { playpause.textContent = "❚❚"; });
+  video.addEventListener("play", () => {
+    playpause.textContent = "❚❚";
+    // 一開始播就解除「點字幕」釘住的錨點 — 否則右邊選的句子會停在剛剛點的那句,
+    // 影片卻繼續跑,之後打的註解會錨到早就過去的時間點(實測踩過)。
+    frozen = null;
+    refreshStamp();
+  });
   video.addEventListener("pause", () => { playpause.textContent = "▶"; });
   video.addEventListener("timeupdate", () => {
     if (video.duration) {
@@ -850,6 +857,7 @@
   });
   video.addEventListener("seeked", updateCap);
   scrub.addEventListener("input", () => {
+    frozen = null;   // 自己拖時間軸 = 以新位置為準,解除釘住的錨點
     if (video.duration) video.currentTime = (scrub.value / 1000) * video.duration;
   });
 
@@ -955,6 +963,7 @@
       inner.appendChild(document.createTextNode(s.text.slice(0, i)));
       const kw = document.createElement("span");
       kw.className = "kwol"; kw.textContent = s.hl;
+      if (s.hl_color) kw.style.color = s.hl_color;   // 指定顏色蓋掉樣式預設的黃
       inner.appendChild(kw);
       inner.appendChild(document.createTextNode(s.text.slice(i + s.hl.length)));
     } else {
@@ -1388,10 +1397,27 @@
     video.classList.add("loaded");
     stage.classList.remove("empty");
     drophint.style.display = "none";
+    // 這一版的輪次戳記跟上次開的不一樣 = AI 出了新的一版,上一輪的註解已經改完了,
+    // 不要再帶回來(不然使用者每次進來都要一則一則點叉叉關掉)。
+    const roundKey = "審片輪次:" + fileName;
+    let freshRound = false;
     try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (A.round && localStorage.getItem(roundKey) !== A.round) {
+        freshRound = true;
+        localStorage.removeItem(storageKey);
+        localStorage.setItem(roundKey, A.round);
+      }
+    } catch (e) {}
+    try {
+      const saved = freshRound ? [] : JSON.parse(localStorage.getItem(storageKey) || "[]");
       notes = Array.isArray(saved) ? saved : [];
     } catch (e) { notes = []; }
+    // 成品這種「字幕已經燒進畫面」的片子,不要再疊一層預覽字幕(會兩層重疊)
+    if (A.burnedIn) {
+      capOn = false;
+      $("captoggle").textContent = "顯示影片上的字幕";
+      capLine.innerHTML = "";
+    }
     if (A.subs) {
       subs = parseSubs(A.subsName || "字幕.json",
                        typeof A.subs === "string" ? A.subs : JSON.stringify(A.subs));
@@ -1400,7 +1426,8 @@
       try { if (subsKey() && subs.length) localStorage.setItem(subsKey(), JSON.stringify(subs)); } catch (e) {}
     }
     renderNotes();
-    showToast("已自動載入 " + A.video + (subs.length ? "(字幕 " + subs.length + " 句)" : ""));
+    showToast("已自動載入 " + A.video + (subs.length ? "(字幕 " + subs.length + " 句)" : "")
+              + (freshRound ? " · 新的一版,已清掉上一輪的註解" : ""));
   })();
 
   refreshStamp();

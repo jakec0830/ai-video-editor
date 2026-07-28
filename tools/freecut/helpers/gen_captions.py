@@ -66,17 +66,20 @@ STYLES = {
 }
 
 
-def hl_html(text: str, hl: str | None) -> str:
+def hl_html(text: str, hl: str | None, hl_color: str | None = None) -> str:
     t = html.escape(text)
     if hl:
         h = html.escape(hl)
         if h in t:
-            t = t.replace(h, f'<span class="kw">{h}</span>', 1)
+            # hl_color 覆蓋樣式預設的塗黃色(例:講「藍色」就把那兩個字染藍)。
+            style = f' style="color:{html.escape(hl_color)}"' if hl_color else ""
+            t = t.replace(h, f'<span class="kw"{style}>{h}</span>', 1)
     return t
 
 
 def build(captions: list[dict], video: str, w: int, h: int,
-          duration: float, font_key: str, style_key: str = "classic") -> str:
+          duration: float, font_key: str, style_key: str = "classic",
+          font_size: int = 56, sub_bottom: str = "var(--safe-bottom)") -> str:
     f = FONTS[font_key]
     st = STYLES[style_key]
     st_inner, st_kw = st["inner"], st["kw"]
@@ -99,7 +102,7 @@ def build(captions: list[dict], video: str, w: int, h: int,
         subs.append(
             f'      <div id="sub-{i}" class="clip sub" data-start="{c["start"]}" '
             f'data-duration="{dur}" data-track-index="5">'
-            f'<span class="sub-inner">{hl_html(c["text"], c.get("hl"))}</span></div>'
+            f'<span class="sub-inner">{hl_html(c["text"], c.get("hl"), c.get("hl_color"))}</span></div>'
         )
     subs_html = "\n".join(subs)
 
@@ -128,10 +131,10 @@ def build(captions: list[dict], video: str, w: int, h: int,
          bottom 用安全區下緣,才不會被 IG 帳號/字幕/進度條蓋到;
          max-width 兩側各清出按鈕欄寬度(取較大的 right,置中對稱)。 */
       .sub {{
-        position:absolute; left:50%; bottom:var(--safe-bottom); transform:translateX(-50%);
+        position:absolute; left:50%; bottom:{sub_bottom}; transform:translateX(-50%);
         width:auto; max-width:calc(100% - 2*var(--safe-right)); text-align:center; z-index:20;
         font-family:{fam_stack},sans-serif; font-weight:{f["weight"]};
-        font-size:56px; line-height:1.32; color:#fff; white-space:nowrap;
+        font-size:{font_size}px; line-height:1.32; color:#fff; white-space:nowrap;
       }}
       /* 樣式 = {style_key}。sub-inner / kw 由 STYLES 決定;定位與安全區在 .sub。 */
       .sub-inner {{ {st_inner} }}
@@ -202,6 +205,12 @@ def main() -> None:
     ap.add_argument("--font", choices=list(FONTS), default="宋體")
     ap.add_argument("--style", choices=list(STYLES), default="classic",
                     help="字幕樣式:classic(預設) / clean / outline / neon / gradient / emphasis")
+    ap.add_argument("--font-size", type=int, default=56,
+                    help="字幕字級 px(預設 56)。使用者說「字大一點」就調這個,不要手改 index.html —— "
+                         "手改的會在下次重跑 gen_captions 時整個被蓋掉。")
+    ap.add_argument("--sub-bottom", default="var(--safe-bottom)",
+                    help="字幕離畫面底部多高,例如 340px(預設 var(--safe-bottom) = IG 安全區下緣 451px)。"
+                         "調低於 450px 會進到 IG 介面區,發 Reels 可能被帳號列/進度條蓋到 —— 要跟使用者講。")
     ap.add_argument("-o", "--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -211,7 +220,8 @@ def main() -> None:
     if not isinstance(captions, list) or not captions:
         sys.exit("captions JSON must be a non-empty list of {start,end,text}")
 
-    html_out = build(captions, args.video, args.w, args.h, args.duration, args.font, args.style)
+    html_out = build(captions, args.video, args.w, args.h, args.duration, args.font, args.style,
+                     args.font_size, args.sub_bottom)
     args.out.write_text(html_out, encoding="utf-8")
     print(f"wrote {args.out}  ({len(captions)} subtitles, font={args.font}, style={args.style})")
     print("next: add creative layers in the marked slots → npx hyperframes lint → render")
