@@ -168,7 +168,13 @@ def main() -> int:
     segs = [s for s in merged if (s[1] - s[0]) * WIN >= a.min_sound]
 
     print(f"區間 {a.start:.2f}-{a.end:.2f}({a.end - a.start:.2f}s) · "
-          f"底噪 {floor_db:.1f}dB · 門檻 {thr:.1f}dB · {len(segs)} 段聲音\n")
+          f"底噪 {floor_db:.1f}dB · 門檻 {thr:.1f}dB · {len(segs)} 段聲音")
+    # 底噪是「這段自己的第 10 百分位」,範圍太窄就沒有足夠的安靜可以當基準,
+    # 爆音偵測會無聲失敗。實測:1.2 秒還抓得到,0.8 秒就完全抓不到。
+    if a.end - a.start < 1.5:
+        print("⚠ 這個範圍太窄(<1.5 秒),底噪估不準,爆音可能抓不到。"
+              "把範圍拉寬到 2-4 秒再跑一次,答案不會因為範圍變寬而改變。")
+    print()
     if not segs:
         print("這段沒有超過門檻的聲音(整段安靜)。門檻太嚴的話調 --offset 小一點。")
         return 0
