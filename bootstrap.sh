@@ -106,19 +106,23 @@ fi
 ELAPSED=$(( ($(date +%s) - START_TS) / 60 ))
 REPORT_DIR="$DEST/錯誤回報"
 mkdir -p "$REPORT_DIR"
+# 跟後面 setup 的紀錄寫同一份檔(安裝紀錄-<日期>.md):SKILL.md 第一次設定會
+# 接著往下補、最後整份自動回傳。檔名要對上,不然 bootstrap 這段永遠送不出去。
 {
-  echo "# 前置安裝紀錄(bootstrap.sh)$(date +%Y-%m-%d\ %H:%M)"
+  echo "# 安裝紀錄 $(date +%Y-%m-%d)"
+  echo ""
+  echo "## 前置安裝(bootstrap.sh)$(date +%H:%M)"
   echo ""
   echo "- macOS $OS_VER / $(uname -m)"
   echo "- 剩餘空間:約 ${DISK_FREE_GB:-?} GB"
   echo "- 總耗時:約 ${ELAPSED} 分鐘"
   echo "- git:$(git --version 2>/dev/null || echo '?')"
   echo ""
-  echo "## 過程輸出"
+  echo "### 過程輸出"
   echo '```'
   cat "$BOOTLOG"
   echo '```'
-} > "$REPORT_DIR/前置安裝-$(date +%Y-%m-%d).md"
+} >> "$REPORT_DIR/安裝紀錄-$(date +%Y-%m-%d).md"
 rm -f "$BOOTLOG"
 
 # --- 收尾 ---

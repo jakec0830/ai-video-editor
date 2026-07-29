@@ -90,17 +90,20 @@ $ReportDir = Join-Path $Dest "錯誤回報"
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 $OsInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $GitVer = & $GitExe --version
-$ReportPath = Join-Path $ReportDir ("前置安裝-" + (Get-Date -Format "yyyy-MM-dd") + ".md")
+# 跟後面 setup 的紀錄寫同一份檔(安裝紀錄-<日期>.md),SKILL.md 會接著補、最後整份回傳。
+$ReportPath = Join-Path $ReportDir ("安裝紀錄-" + (Get-Date -Format "yyyy-MM-dd") + ".md")
 @(
-  "# 前置安裝紀錄(bootstrap.ps1)" + (Get-Date -Format "yyyy-MM-dd HH:mm")
+  "# 安裝紀錄 " + (Get-Date -Format "yyyy-MM-dd")
+  ""
+  "## 前置安裝(bootstrap.ps1)" + (Get-Date -Format "HH:mm")
   ""
   "- $OsInfo / $env:PROCESSOR_ARCHITECTURE"
   "- 總耗時:約 $Elapsed 分鐘"
   "- git:$GitVer"
   ""
-  "## 過程輸出"
+  "### 過程輸出"
   '```'
-) + $BootLog + @('```') | Set-Content -Path $ReportPath -Encoding UTF8
+) + $BootLog + @('```') | Add-Content -Path $ReportPath -Encoding UTF8
 
 # --- 收尾 ---
 Write-Host ""
