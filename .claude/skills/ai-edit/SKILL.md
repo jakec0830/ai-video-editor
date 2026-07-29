@@ -41,17 +41,13 @@ description: 用對話幫使用者從頭到尾剪一支口播影片 — 本機�
    - Mac/Linux 跑 `bash setup.sh`、Windows 跑 `powershell -ExecutionPolicy Bypass -File setup.ps1`,**看 exit code**:0 = 就緒;非 0 時結尾會列「還沒完成 — 缺:…」,照那份清單補。
    - 把所有缺的東西**彙總成一句**跟使用者確認,含大小跟時間預期,例:「這台電腦缺 3 樣:Node、ffmpeg、思源宋體字型,加起來約 300-400MB、裝 10-15 分鐘,都用官方來源自動裝,要開始嗎?」
    - **要等的步驟先講要等多久**(字型 132MB、winget 下載、XXL 1.4GB 這種),不然使用者會以為當機。
-2. **Mac 沒有 Homebrew 時(全新 Mac 很常見)— 走官方 .pkg 圖形安裝,不碰終端機:**
-   1. 一句話說明:「你的 Mac 缺一個叫 Homebrew 的工具管理員(官方、免費),裝好以後我裝其他東西都不再需要密碼。我會下載官方安裝檔(約 130MB),你像裝一般軟體一樣點幾下就好。」
-   2. 從 `https://github.com/Homebrew/brew/releases/latest` 下載官方 `Homebrew.pkg`,下載完 `open` 它讓安裝視窗跳出來。
-   3. 帶著點:繼續 → 安裝 → 這時 Mac 會用**它自己的視窗**要密碼。話術照講:「這是 macOS 在問,不是我。是你**重開機登入 Mac 打的那組密碼**,不是 Apple ID 的(平常都用 Touch ID 解鎖的人也有這組)。打在那個視窗裡,不要打在聊天視窗。」 → 完成。
-   4. 用完整路徑驗證 `/opt/homebrew/bin/brew --version`(新裝的 brew 不在這個 session 的 PATH — 重新 `source KIT/tools/env.sh` 就有了),把 `eval "$(/opt/homebrew/bin/brew shellenv)"` 寫進 `~/.zprofile`(你自己寫檔,使用者不用動手),然後**把下載的 Homebrew.pkg 刪掉**(129MB,用完即丟)。
-   5. 密碼想不起來、或使用者不想輸入 → 不要卡關也不要勸,直接走第 3 步的免密碼備案,一樣裝得起來。
-3. **免密碼備案(全部裝進家目錄,永遠不需要密碼)** — 只在 .pkg 那條走不通時用:
+2. **Mac 的安裝策略:不要幫使用者裝 Homebrew。** 這台**已經有** brew 就照用(`brew install ...`);沒有就直接走第 3 步的免密碼直裝。理由(實測,2026-07-29 Intel/Ventura 裝機記錄):Homebrew.pkg 要求 macOS 14 以上,在 macOS 13 會卡在「無法安裝在此磁碟上」這種誤導訊息;而且 Ventura 上就算裝好 brew,ffmpeg 也已無預編譯包,會從原始碼編譯數小時。免密碼直裝新舊 Mac 都通用,還不用密碼。
+3. **免密碼直裝(全部裝進家目錄,永遠不需要密碼)— 沒有 brew 的 Mac 走這條主路徑:**
+   - **開始前一次講清楚、一次取得同意**(不要裝到一半才冒出新的問題):「我會從三個官方/標準來源下載:Node(nodejs.org)、字型(Adobe 官方 GitHub)、影片引擎 ffmpeg(社群編譯版 — Mac 沒有官方安裝檔,這是業界標準做法,畫質跟官方完全一樣)。都裝進你的家目錄,不動系統設定、不需要密碼,OK 嗎?」同意後中途就不要再重複問。
    - Node:nodejs.org 官方 tarball → 解到 `~/.local/opt/node`,symlink 進 `~/.local/bin`。
    - 思源宋體:Adobe 官方 GitHub releases 的 `SourceHanSerif-VF.otf.ttc` → `~/Library/Fonts/`。
-   - ffmpeg/ffprobe:社群 static build(下載後**驗它公布的 SHA256**)→ `~/.local/bin`,`xattr -c` 清隔離屬性。先用白話取得同意:「影片引擎這份是社群編譯版 — Mac 沒有官方版,這是不輸密碼的唯一辦法。畫質跟官方完全一樣,差別只在來源信任度,OK 嗎?」
-   - PATH 寫進 **`~/.zshenv`,不是 `.zshrc`**(非互動 shell 讀不到 `.zshrc`,setup 會誤判成沒裝);寫完**這個 session 還是要 `source KIT/tools/env.sh`** — `.zshenv` 只對之後新開的 shell 生效。
+   - ffmpeg/ffprobe:社群 static build(下載後**驗它公布的 SHA256**)→ `~/.local/bin`。**不要 `xattr -c`**:curl 下載的檔案不帶 `com.apple.quarantine`,Gatekeeper 本來就不會擋;清隔離屬性是不必要的安全弱化動作,還會被 Claude Code 的權限機制攔下、害流程卡住(實測)。
+   - PATH:工具包內部用 `KIT/tools/env.sh` 就涵蓋了(setup.sh 開頭會 source),**不需要碰 `~/.zshenv`**。只有使用者自己想在終端機直接打 `ffmpeg` 才需要寫,那是選配,先問過再寫。
 4. 裝完**重跑一次 setup 腳本**,確認 exit code 是 0。腳本已涵蓋各平台的安裝(Mac brew / Windows winget / 字型腳本),不用自己拼指令;腳本搞不定的例外才照 README 手動裝。
    - **然後把 `KIT/安裝完成說明.md` 的內容轉述給使用者**(setup 每次跑完會產生/更新這份)。裡面三件事都要講到:驗收訊號、接下來 3 步、以及**「資料夾裡少了幾個檔案是正常的」**。
    - **exit code 是給你判斷用的,那份說明是給使用者看的,兩件事不要混。** 實測炸過:AI 看到 exit code 0,就把結果自己改寫成一張漂亮的摘要表格,結果 setup 印的收尾訊息一個字都沒轉達 — 而 setup 剛剛用 `chflags hidden` 把 `tools/`、`setup.sh` 等 6 個項目在 Finder 藏起來了,學員打開資料夾發現檔案不見,以為裝壞了。**setup 的輸出不是只有 exit code,那段話本來就是寫給使用者的。**
