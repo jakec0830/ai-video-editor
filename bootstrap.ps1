@@ -1,9 +1,11 @@
-﻿# bootstrap.ps1 — AI 剪輯工具包 前置安裝(Windows)
+# bootstrap.ps1 — AI 剪輯工具包 前置安裝(Windows)
 # 學員在 PowerShell 貼一行跑這支:裝 Git for Windows + 下載工具包到家目錄。
 # 用法(印在課程講義上,永遠不要改這個網址):
 #   irm https://raw.githubusercontent.com/jakec0830/ai-video-editor/main/bootstrap.ps1 | iex
 #
 # 設計原則:跟 bootstrap.sh 一樣 — 對新手講白話、失敗就叫他截圖傳群組。
+# 注意:這個檔案必須存成「UTF-8 無 BOM」。有 BOM 的話 irm|iex 在 Windows
+# PowerShell 5.1 會把第一行註解當指令跑,噴 CommandNotFoundException 紅字。
 # Git 用 winget 裝(Windows 內建),只會跳一次「要允許變更嗎?」點「是」即可。
 
 $ErrorActionPreference = "Stop"
@@ -51,15 +53,19 @@ if ($GitExe) {
   Log "[1/2] 檢查 Git ... 沒有,現在開始裝(用 Windows 內建的 winget)。"
   Write-Host ""
   Write-Host "   等一下會跳出一個視窗問「要允許此 App 變更你的裝置嗎?」"
-  Write-Host "   請點「是」。然後等幾分鐘,我會自己繼續。"
+  Write-Host "   請點「是」(視窗有時躲在工作列閃爍,找一下)。"
+  Write-Host "   下載要幾分鐘,下面會顯示進度,不要關視窗。"
+  Write-Host "   注意:不要用滑鼠在這個黑視窗裡點選文字,程式會被暫停;"
+  Write-Host "   如果不小心點到、畫面很久都沒動,按一下 Enter 就會繼續。"
   Write-Host ""
   $winget = Get-Command winget -ErrorAction SilentlyContinue
   if (-not $winget) {
     Fail "這台 Windows 沒有 winget(通常是太久沒更新 Windows)。請先到 git-scm.com/downloads/win 下載 Git 安裝檔,像裝一般軟體一樣一直按下一步裝完,再重新貼一次這行指令。"
   }
-  try {
-    winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements | Out-Null
-  } catch {
+  # 不要把輸出丟掉:讓學員看得到下載進度,才不會以為當機。
+  # winget 失敗不會丟例外,要看 $LASTEXITCODE。
+  winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) {
     Fail "Git 安裝沒有成功。請到 git-scm.com/downloads/win 下載 Git 安裝檔,手動裝完再重新貼一次這行指令。"
   }
   $GitExe = Find-Git
