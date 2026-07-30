@@ -346,6 +346,14 @@ GSAP 疊層,跟字幕同一個 composition:
 npx hyperframes render --quality standard --output <專案>/工作檔/render_final.mp4
 ```
 
+**8GB 記憶體的機器(硬規則,實測 2026-07-30 Gary/M1 Air 8GB):** render 前先查 RAM(`sysctl -n hw.memsize`)。**8GB 以下、或任何時候看到 `capture stalled: no frame progress` 這個錯**,直接改用:
+
+```bash
+npx hyperframes render --quality standard --no-low-memory-mode --workers 3 --protocol-timeout 900000 --output <專案>/工作檔/render_final.mp4
+```
+
+不要試其他 flag、不要建議裝 Docker(錯誤訊息會叫你 `Try --docker`,學員機器沒有 Docker,那是死路)。原因:hyperframes 偵測到 ≤8GB 會自動開「低記憶體模式」(鎖 1 worker + screenshot 擷取),但這個模式在 2 分鐘以上的片**必定 stall**,連續失敗還每次白等 4~7 分鐘;關掉改 3 workers 實測一次成功(4089 影格 6 分鐘)。這是引擎的預設值 bug,上游修好前照這條走。
+
 **render 一律輸出到 `工作檔/render_final.mp4`,不要直接輸出成 `成品.mp4`** — 成品.mp4 只能由第 7 步的混音(或無音效時的複製)產生,不然「render 版」跟「混音版」會變成兩個成品打架(實測學員回報過:專案裡出現兩份成品、還多一個成品資料夾)。規則:**成品.mp4 永遠只有一個、永遠在專案根目錄、絕不建「成品/」資料夾**;產出新成品前先刪舊的。
 
 `--quality draft` 輸出的 codec 只能給 AI 自己擷取影格檢查用 — 在播放器裡會播不完整。**任何要給使用者看的一定要 `standard`。** render 完用 ffprobe 確認長度;**擷取影格檢查用 `ffmpeg tile` 把多個檢查點拼成一張圖**(例:`-filter_complex "[0][1][2]...hstack"`),AI 讀 1 張代替 6 張(~1.5k vs ~9k token),再跟使用者說做好了。
