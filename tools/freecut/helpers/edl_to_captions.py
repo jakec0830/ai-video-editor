@@ -47,7 +47,7 @@ def display_width(s):
 
 
 def load_words(transcript_path):
-    data = json.loads(Path(transcript_path).read_text())
+    data = json.loads(Path(transcript_path).read_text(encoding="utf-8"))
     words = data["words"] if isinstance(data, dict) else data
     out = []
     for w in words:
@@ -63,21 +63,36 @@ def map_to_output(words, ranges):
         offsets.append(cum)
         cum += r["end"] - r["start"]
 
+    # Whisper 字級時間普遍比實際發聲早 0.2-0.5 秒。舊判斷「w.start 落在 range 內」
+    # 會把剪點邊界的字整個丟掉:聲音在、字幕沒字、零警告,下游(verify_cut)也看不出來
+    # — 十份學員回報同一個坑。改成「字的區間與 range 有重疊就保留」:取重疊最大的
+    # range,對映時間 clamp 進 range,跨過剪點起點的字印一行讓 AI 看得到。
     kept = []
     for w in words:
+        best = None
         for r, off in zip(ranges, offsets):
-            if r["start"] - 0.001 <= w["start"] < r["end"] - EDGE_GUARD:
-                kept.append({
-                    "os": round(off + (w["start"] - r["start"]), 3),
-                    "text": w["text"],
-                    "s": w["start"], "e": w["end"],
-                })
-                break
+            lo = max(w["start"], r["start"])
+            hi = min(w["end"], r["end"] - EDGE_GUARD)
+            ov = hi - lo
+            if ov > 0 and (best is None or ov > best[0]):
+                best = (ov, r, off, lo, hi)
+        if best is None:
+            continue
+        ov, r, off, lo, hi = best
+        if w["start"] < r["start"] - 0.001:
+            print(f"  邊界字保留:「{w['text']}」start {w['start']:.2f} 早於剪點 "
+                  f"{r['start']:.2f}(Whisper 時間偏早),已對齊剪點", file=sys.stderr)
+        kept.append({
+            "os": round(off + (lo - r["start"]), 3),
+            "ov": round(ov, 3),
+            "text": w["text"],
+            "s": w["start"], "e": w["end"],
+        })
     kept.sort(key=lambda k: k["os"])
 
     # monotonic clamp: a word may not extend past the next word's output start
     for i, k in enumerate(kept):
-        natural = k["os"] + (k["e"] - k["s"])
+        natural = k["os"] + k.pop("ov")   # clamped span = audible portion in this range
         k["oe"] = min(natural, kept[i + 1]["os"]) if i + 1 < len(kept) else natural
     return kept
 
@@ -133,8 +148,8 @@ def main():
                     help="max display width per line (CJK=2, ASCII=1)")
     args = ap.parse_args()
 
-    ranges = json.loads(Path(args.edl).read_text())["ranges"]
-    fixes = json.loads(Path(args.fixes).read_text()) if args.fixes else {}
+    ranges = json.loads(Path(args.edl).read_text(encoding="utf-8"))["ranges"]
+    fixes = json.loads(Path(args.fixes).read_text(encoding="utf-8")) if args.fixes else {}
 
     words = merge_latin(map_to_output(load_words(args.transcript), ranges))
 
@@ -161,7 +176,7 @@ def main():
         sys.exit(f"BUG: overlapping captions at indexes {overlaps} — report this")
 
     Path(args.output).write_text(
-        json.dumps(caps, ensure_ascii=False, indent=1))
+        json.dumps(caps, ensure_ascii=False, indent=1), encoding="utf-8")
     for i, c in enumerate(caps):
         print(f"{i:3} {c['start']:7.2f}-{c['end']:7.2f}  {c['text']}")
     print(f"\n{len(caps)} lines → {args.output}  (no overlaps)")

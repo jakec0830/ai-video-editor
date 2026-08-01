@@ -70,7 +70,7 @@ def _read_env_file() -> dict[str, str]:
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if not candidate.exists():
             continue
-        for line in candidate.read_text().splitlines():
+        for line in candidate.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -215,25 +215,40 @@ def transcribe_whisper(
 
     elif _faster_whisper_available():
         from faster_whisper import WhisperModel
-        wm = WhisperModel(model, device="auto", compute_type="auto")
-        segments, _info = wm.transcribe(
-            str(audio_path),
-            language=language,
-            word_timestamps=True,
-            vad_filter=False,
-        )
-        for seg in segments:
-            for w in (seg.words or []):
-                text = (w.word or "").strip()
-                if not text:
-                    continue
-                word_entries.append({
-                    "type": "word",
-                    "text": text,
-                    "start": float(w.start),
-                    "end": float(w.end),
-                    "speaker_id": "speaker_0",
-                })
+
+        # device="auto" 只看「有沒有 GPU」,不看 CUDA 執行階段有沒有裝 — 學員機器
+        # 不會裝 CUDA Toolkit,所以有顯卡的 Windows 一律炸 cublas64 載入錯誤,
+        # 不會自己退回 CPU(學員實測)。而且 wm.transcribe() 是 lazy 的,錯誤要到
+        # 迭代 segments 才浮出來,所以整段迭代都要包住;結果先收進區域 list,
+        # 成功才 extend,失敗那次的半截結果不會混進來。
+        def _run_faster_whisper(device: str, compute_type: str) -> list[dict]:
+            wm = WhisperModel(model, device=device, compute_type=compute_type)
+            segments, _info = wm.transcribe(
+                str(audio_path),
+                language=language,
+                word_timestamps=True,
+                vad_filter=False,
+            )
+            entries: list[dict] = []
+            for seg in segments:
+                for w in (seg.words or []):
+                    text = (w.word or "").strip()
+                    if not text:
+                        continue
+                    entries.append({
+                        "type": "word",
+                        "text": text,
+                        "start": float(w.start),
+                        "end": float(w.end),
+                        "speaker_id": "speaker_0",
+                    })
+            return entries
+
+        try:
+            word_entries.extend(_run_faster_whisper("auto", "auto"))
+        except Exception as e:
+            print(f"  faster-whisper device=auto 失敗({e.__class__.__name__}),改用 CPU 重跑", file=sys.stderr)
+            word_entries.extend(_run_faster_whisper("cpu", "int8"))
 
     elif _find_whisper_xxl():
         # Windows fallback: pip faster-whisper is blocked by Smart App Control,
@@ -607,7 +622,7 @@ def transcribe_one(
             api_key=api_key,
         )
 
-    out_path.write_text(json.dumps(payload, indent=2))
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     # Always drop a compact companion the reading agent should use instead of
     # the fat JSON (see write_compact). Cheap to produce, big token saver.
     compact_path = out_path.with_suffix(".words.txt")

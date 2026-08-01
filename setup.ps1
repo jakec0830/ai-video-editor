@@ -7,8 +7,9 @@
   用法(在 PowerShell 裡,cd 到工具包資料夾):
       powershell -ExecutionPolicy Bypass -File .\setup.ps1
 
-  逐字稿引擎注意:pip 版 faster-whisper 在全新 Windows 11 會被 Smart App Control
-  擋掉(未簽章 DLL)。這支會當場驗證,擋住時引導你改用 Faster-Whisper-XXL 獨立版。
+  逐字稿引擎注意:pip 版 faster-whisper 在「部分」全新 Windows 11 會被 Smart App
+  Control 擋掉(未簽章 DLL)— 實測多台都沒被擋,所以先試 pip 版,被擋才引導
+  Faster-Whisper-XXL 獨立版。另外 ctranslate2 必須 <4.6(4.6+ 載入模型必崩潰)。
 #>
 [CmdletBinding()]
 param()
@@ -26,6 +27,22 @@ function Refresh-Path {
               [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
+function Find-RealPython {
+  # Windows 預設在 WindowsApps 放 python.exe/python3.exe 的 Microsoft Store 空殼
+  # (點了只會開商店頁)。Get-Command 找得到它,但不能用。
+  # 「裝不裝」跟「拿來用」必須用同一套判斷 — 之前只有後半段排除空殼,
+  # 結果空殼騙過安裝判斷 → 跳過安裝 → 後面找不到 python → exit 1,
+  # 錯誤訊息還叫人重開 PowerShell 再跑(重跑幾次都一樣)。兩台實測機都踩過。
+  foreach ($name in @("python", "python3")) {
+    foreach ($c in (Get-Command $name -All -ErrorAction SilentlyContinue)) {
+      if ($c.Source -like "*WindowsApps*") { continue }   # 商店空殼,跳過
+      try { $v = & $c.Source --version 2>&1 } catch { continue }
+      if ($v -match "Python 3\.") { return $c.Source }
+    }
+  }
+  return $null
+}
+
 # --- 0. winget 在不在 -------------------------------------------------------
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
   Write-Host "[X] 找不到 winget。請先更新 Windows / 從 Microsoft Store 裝『應用程式安裝程式』後再重跑。"
@@ -34,7 +51,8 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 
 # --- 1. 用 winget 裝系統層工具(一次講清楚要裝什麼)------------------------
 $deps = @(
-  @{ Name = "Python 3.12"; Id = "Python.Python.3.12";  Probe = "python" },
+  # Python 不能用單純的 Get-Command 當 Probe — 會被 Microsoft Store 空殼騙過,見 Find-RealPython。
+  @{ Name = "Python 3.12"; Id = "Python.Python.3.12";  Probe = $null; PyProbe = $true },
   @{ Name = "Node.js LTS"; Id = "OpenJS.NodeJS.LTS";    Probe = "node"   },
   @{ Name = "ffmpeg";      Id = "Gyan.FFmpeg";          Probe = "ffmpeg" },
   # VC++ 執行階段:CTranslate2 這類含 C 擴充的套件常需要。實測機器上有裝
@@ -43,10 +61,13 @@ $deps = @(
      RegProbe = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" }
 )
 Write-Host "--- 系統工具(winget)---"
+Write-Host "(過程中可能跳出藍色的「使用者帳戶控制」視窗,請按「是」— 不按流程會停在原地等。"
+Write-Host " ffmpeg 有 250MB,下載+解壓可能要 20 分鐘以上,沒有進度條也不是當機。)"
 Refresh-Path   # 先重讀 PATH:重跑 setup 時,上次裝好的工具才偵測得到(不然會誤判成沒裝)
 foreach ($d in $deps) {
   $installed = $false
   if ($d.Probe -and (Get-Command $d.Probe -ErrorAction SilentlyContinue)) { $installed = $true }
+  if ($d.PyProbe -and (Find-RealPython)) { $installed = $true }
   if ($d.RegProbe -and (Test-Path $d.RegProbe)) { $installed = $true }
   if ($installed) {
     Write-Host "[OK] $($d.Name) 已安裝"
@@ -63,17 +84,14 @@ foreach ($d in $deps) {
 Refresh-Path
 
 # --- 2. Python 環境 + 套件 --------------------------------------------------
-# 找真的 python(排除 Microsoft Store 空殼)
-$PY = $null
-foreach ($name in @("python", "python3")) {
-  $cmd = Get-Command $name -ErrorAction SilentlyContinue
-  if (-not $cmd) { continue }
-  if ($cmd.Source -like "*WindowsApps*") { continue }   # 商店空殼,跳過
-  try { $v = & $cmd.Source --version 2>&1 } catch { continue }
-  if ($v -match "Python 3\.") { $PY = $cmd.Source; break }
-}
+# 找真的 python — 跟第 1 段的安裝判斷共用 Find-RealPython,不會再自相矛盾。
+$PY = Find-RealPython
 if (-not $PY) {
-  Write-Host "[X] 找不到可用的 Python(裝完可能要把 PowerShell 關掉重開,再重跑一次)。"
+  Write-Host "[X] 找不到可用的 Python。看看上面 winget 裝 Python 那段有沒有錯誤訊息;"
+  Write-Host "    剛裝好的話,把 PowerShell 關掉重開再跑一次 setup.ps1。"
+  Write-Host "    重跑還是這樣,就手動裝(裝完重開 PowerShell 再跑 setup):"
+  Write-Host "    winget install --id Python.Python.3.12 --source winget --scope user --silent ``"
+  Write-Host "      --accept-source-agreements --accept-package-agreements --disable-interactivity"
   exit 1
 }
 Write-Host "[OK] python: $(& $PY --version)"
@@ -86,15 +104,21 @@ if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
 $VPY = Join-Path $venv "Scripts\python.exe"
 if (-not (Test-Path $VPY)) { Write-Host "[X] Python 環境沒建成功。確認 Python 真的裝好再重跑。"; exit 1 }
 
-& $VPY -m pip install -q --upgrade pip 2>&1 | Out-Null
+# pip 一律讓輸出看得見 — 之前用 -q + Out-Null,PyPI 塞車時畫面靜止 12 分鐘,
+# 學員(跟 AI)都以為當機。有進度在動就不會誤判。
+& $VPY -m pip install --upgrade pip | Out-Null
 Write-Host "   安裝核心套件 (requests, pillow, numpy, opencc) ..."
 # opencc-python-reimplemented: 簡轉繁,純 Python(沒 C++ DLL)。刻意不用 PyPI 的
 # `opencc`,那個帶未簽章 DLL,在 Windows 可能又被 Smart App Control 擋。
-& $VPY -m pip install -q requests pillow numpy opencc-python-reimplemented 2>&1 | Out-Null
+& $VPY -m pip install requests pillow numpy opencc-python-reimplemented
 
 # --- 3. 逐字稿引擎:先試 pip faster-whisper,擋住就引導 XXL 獨立版 --------
-Write-Host "   先試 faster-whisper(pip) ..."
-& $VPY -m pip install -q faster-whisper 2>&1 | Out-Null
+Write-Host "   先試 faster-whisper(pip)... 下載幾百 MB,PyPI 塞車時可能 10 分鐘以上,慢不是當機。"
+# ctranslate2 一定要釘 <4.6:4.6+ 在 Windows 載入 Whisper 模型的瞬間直接 access
+# violation(0xC0000005)。最陰的是 setup 全綠、import 也過 — 崩潰發生在「載入模型」,
+# 學員把影片丟進來、剪到轉逐字稿那步才炸。實測 4.5.0 正常、4.8.1 必炸。
+# 放同一行裝:舊 venv 裡已有 4.8 的話,這行也會把它降回來。
+& $VPY -m pip install faster-whisper "ctranslate2<4.6"
 & $VPY -c "import faster_whisper" 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) {
   Write-Host "[OK] faster-whisper 已安裝且可用"

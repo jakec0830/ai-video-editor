@@ -25,12 +25,20 @@ fi
 
 VIDEO="$1"; BGM="$2"; OUT="$3"; VOL="${4:-0.18}"
 
+# Windows(Git Bash):ffmpeg/ffprobe 是原生 exe,MSYS 路徑要先轉;有 cygpath 才轉,
+# Mac/Linux 原樣通過。
+if command -v cygpath >/dev/null 2>&1; then
+  VIDEO="$(cygpath -m "$VIDEO")"; BGM="$(cygpath -m "$BGM")"; OUT="$(cygpath -m "$OUT")"
+fi
+
 DUR=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$VIDEO")
-FADE_OUT_START=$(python3 -c "print(max(0, $DUR - 1.6))")
+# 算 fade-out 起點用 awk,不用 python3 — 全新 Windows 的 python3 是 Microsoft Store
+# 的 0-byte 空殼,執行失敗配上 set -e 整支中斷(學員實測)。awk 到處都有。
+FADE_OUT_START=$(awk -v d="$DUR" 'BEGIN { s = d - 1.6; if (s < 0) s = 0; print s }')
 
 ffmpeg -y -i "$VIDEO" -stream_loop -1 -i "$BGM" -filter_complex "
 [1:a]atrim=0:${DUR},afade=t=in:st=0:d=1.0,afade=t=out:st=${FADE_OUT_START}:d=1.5,volume=${VOL}[bgm];
-[0:a][bgm]amix=inputs=2:normalize=0[mix];[mix]alimiter=limit=0.97[aout]
+[0:a][bgm]amix=inputs=2:normalize=0[mix];[mix]alimiter=limit=0.89:level=disabled[aout]
 " -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k "$OUT"
 
 echo ""

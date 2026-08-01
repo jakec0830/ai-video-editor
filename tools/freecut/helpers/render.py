@@ -124,7 +124,7 @@ def is_hdr_source(video: Path) -> bool:
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=color_transfer",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
         )
         return out.stdout.strip() in HDR_TRANSFERS
     except subprocess.CalledProcessError:
@@ -148,7 +148,7 @@ def video_display_size(video: Path) -> tuple[int, int] | None:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_streams", "-of", "json", str(video)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
         )
         stream = (json.loads(out.stdout).get("streams") or [{}])[0]
         w = int(stream.get("width") or 0)
@@ -307,7 +307,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")
 
     cmd = [
         "ffmpeg", "-y",
@@ -376,7 +376,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             seg_offset += seg_duration
             continue
 
-        transcript = json.loads(tr_path.read_text())
+        transcript = json.loads(tr_path.read_text(encoding="utf-8"))
         words_in_seg = _words_in_range(transcript, seg_start, seg_end)
 
         # Group into 2-word chunks, break on punctuation
@@ -419,7 +419,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         lines.append(f"{_srt_timestamp(a)} --> {_srt_timestamp(b)}")
         lines.append(t)
         lines.append("")
-    out_path.write_text("\n".join(lines))
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"master SRT → {out_path.name} ({len(entries)} cues)")
 
 
@@ -448,7 +448,7 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
         "-af", filter_str,
         "-vn", "-f", "null", "-",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     # loudnorm prints the JSON to stderr at the end of the run
     stderr = proc.stderr
 
@@ -467,53 +467,93 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     return data
 
 
+# alimiter ceiling ~= -1 dBTP. level=disabled is required: the default
+# auto-gains the signal back up to the limit, pinning peaks at the ceiling.
+LIMITER_CEILING = 0.89
+
+
+def decoded_audio_duration(path: Path) -> float | None:
+    """Actually decode the audio and return its real duration in seconds.
+
+    Container metadata can lie (ffmpeg 8.1 loudnorm bug produced files whose
+    container said 59s but decoded to 56s), so this decodes to null and reads
+    the final progress timestamp.
+    """
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(path), "-vn", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    matches = re.findall(r"time=(\d+):(\d+):(\d+\.?\d*)", proc.stderr)
+    if not matches:
+        return None
+    h, m, s = matches[-1]
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
+def video_duration(path: Path) -> float | None:
+    proc = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        return float(proc.stdout.strip())
+    except ValueError:
+        return None
+
+
+def check_av_duration(path: Path, tolerance: float = 0.2) -> bool:
+    """Warn loudly if decoded audio is shorter than the video track.
+
+    Guards against silent audio truncation (seen with loudnorm on ffmpeg 8.1:
+    exit 0, no error, ~5% of the audio gone and everything out of sync).
+    """
+    vd = video_duration(path)
+    ad = decoded_audio_duration(path)
+    if vd is None or ad is None:
+        return True  # can't measure — don't block, but don't claim OK either
+    if abs(vd - ad) > tolerance:
+        print(f"  ⚠ 影音長度不一致:影像 {vd:.2f}s vs 實際解碼音訊 {ad:.2f}s "
+              f"(差 {abs(vd - ad):.2f}s)— 音訊可能被靜默截斷,不要交付這個檔案")
+        return False
+    return True
+
+
 def apply_loudnorm_two_pass(
     input_path: Path,
     output_path: Path,
     preview: bool = False,
 ) -> bool:
-    """Run two-pass loudnorm on input_path, write normalized copy to output_path.
+    """Normalize loudness to LOUDNORM_I via measure → volume gain → limiter.
+
+    Deliberately does NOT use loudnorm as an output filter: on ffmpeg 8.1 it
+    silently drops ~5% of the audio (exit 0, no error). The loudnorm
+    measurement pass is unaffected, so we measure with it, then apply a plain
+    volume gain and a limiter for the true-peak ceiling.
 
     Returns True on success, False if measurement failed (caller should fall
     back to copying the input unchanged).
-
-    In preview mode, skips the measurement pass and uses a one-pass approximation
-    for speed. Final mode always does the proper two-pass.
     """
-    if preview:
-        # One-pass approximation — faster, slightly less accurate.
-        filter_str = f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats",
-            "-i", str(input_path),
-            "-c:v", "copy",
-            "-af", filter_str,
-            "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-            "-movflags", "+faststart",
-            str(output_path),
-        ]
-        print(f"  loudnorm (1-pass preview) → {output_path.name}")
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        return True
-
-    # Full two-pass
-    print(f"  loudnorm pass 1: measuring {input_path.name}")
+    print(f"  loudness pass 1: measuring {input_path.name}")
     measurement = measure_loudness(input_path)
     if measurement is None:
-        print("  loudnorm measurement failed — falling back to 1-pass")
-        return apply_loudnorm_two_pass(input_path, output_path, preview=True)
+        print("  loudness measurement failed — copying audio unchanged")
+        return False
 
     print(f"    measured: I={measurement['input_i']} LUFS  "
           f"TP={measurement['input_tp']}  LRA={measurement['input_lra']}")
 
+    try:
+        gain_db = LOUDNORM_I - float(measurement["input_i"])
+    except ValueError:
+        print("  loudness measurement unreadable — copying audio unchanged")
+        return False
+    # Sanity clamp: near-silent or absurd measurements produce absurd gains.
+    gain_db = max(-20.0, min(20.0, gain_db))
+
     filter_str = (
-        f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
-        f":measured_I={measurement['input_i']}"
-        f":measured_TP={measurement['input_tp']}"
-        f":measured_LRA={measurement['input_lra']}"
-        f":measured_thresh={measurement['input_thresh']}"
-        f":offset={measurement['target_offset']}"
-        f":linear=true"
+        f"volume={gain_db:.2f}dB,"
+        f"alimiter=limit={LIMITER_CEILING}:level=disabled"
     )
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-nostats",
@@ -524,7 +564,7 @@ def apply_loudnorm_two_pass(
         "-movflags", "+faststart",
         str(output_path),
     ]
-    print(f"  loudnorm pass 2: normalizing → {output_path.name}")
+    print(f"  loudness pass 2: volume {gain_db:+.2f}dB + limiter → {output_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return True
 
@@ -646,7 +686,7 @@ def main() -> None:
     if not edl_path.exists():
         sys.exit(f"edl not found: {edl_path}")
 
-    edl = json.loads(edl_path.read_text())
+    edl = json.loads(edl_path.read_text(encoding="utf-8"))
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
 
@@ -683,12 +723,16 @@ def main() -> None:
         # Composite directly to final output
         build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
     else:
-        # Composite to a temp file, then run loudnorm → final output
+        # Composite to a temp file, then normalize loudness → final output
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
         build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
-        print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
-        apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
-        tmp_composite.unlink(missing_ok=True)
+        print("loudness normalization → social-ready (-14 LUFS / -1 dBTP ceiling)")
+        if apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft):
+            tmp_composite.unlink(missing_ok=True)
+        else:
+            tmp_composite.replace(out_path)
+
+    check_av_duration(out_path)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"\ndone: {out_path} ({size_mb:.1f} MB)")
