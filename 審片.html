@@ -993,18 +993,33 @@
     const w = Math.max(1, Math.round(vr.width)), h = Math.max(1, Math.round(vr.height));
     if (penCanvas.width !== w || penCanvas.height !== h) {
       penCanvas.width = w; penCanvas.height = h; hasStrokes = false;  // 改尺寸會清空
+      refreshAddBtn();   // 畫記被清掉了,按鈕狀態要跟著更新(不然會亮著但按了沒反應)
     }
     setPenStyle();
   }
-  function clearPen() { pctx.clearRect(0, 0, penCanvas.width, penCanvas.height); hasStrokes = false; }
+  function clearPen() {
+    pctx.clearRect(0, 0, penCanvas.width, penCanvas.height);
+    hasStrokes = false;
+    refreshAddBtn();     // 同上:清除後按鈕要變回不能按
+  }
   function captureAnnotated() {
     // 把「當下這格影片 + 紅筆畫記」合成一張圖(顯示解析度就夠 AI 看位置)
+    // 存不下來就回傳 null(不要 throw)—— 見下面的 SecurityError 說明。
     const c = document.createElement("canvas");
     c.width = penCanvas.width; c.height = penCanvas.height;
     const cx = c.getContext("2d");
     try { cx.drawImage(video, 0, 0, c.width, c.height); } catch (e) {}
     cx.drawImage(penCanvas, 0, 0);
-    return c.toDataURL("image/png");
+    // ★ toDataURL 一定要包 try:用 file:// 直接打開這頁時,把影片畫進 canvas 會讓 canvas
+    //   變成「被污染」(tainted)狀態,Chrome / Safari 這時候 toDataURL 會丟 SecurityError。
+    //   drawImage 本身不會丟,所以只包 drawImage 是抓不到的。
+    //   以前沒包 → 這個 throw 會從 addNote() 裡竄出去,註解根本沒被加進去,
+    //   使用者看到的就是「有畫畫的時候,加註解按了沒反應」。
+    try {
+      return c.toDataURL("image/png");
+    } catch (e) {
+      return null;
+    }
   }
 
   $("captoggle").addEventListener("click", () => {
@@ -1070,13 +1085,20 @@
     if (!video.src) return;
     let text = noteBox.value.trim();
     if (!text && !hasStrokes) return;
+    // 先把圖存出來再 pushUndo —— 存圖有可能失敗,失敗了也不能讓註解掉了
+    let img = null, imgFailed = false;
+    if (hasStrokes) {
+      img = captureAnnotated();
+      imgFailed = (img === null);
+    }
     pushUndo();
-    if (!text) text = "(見畫記)";
+    if (!text) text = imgFailed ? "(有畫記但存不成圖,請用文字描述位置)" : "(見畫記)";
     const t = frozen !== null ? frozen : (video.currentTime || 0);
     const note = { id: Date.now() + Math.random(), t: t, text: text };
     const line = subLineFor(t);
     if (line) note.line = line.text;   // 錨在字幕句上(比秒數準)
-    if (hasStrokes) { note.img = captureAnnotated(); clearPen(); }
+    if (img) note.img = img;
+    if (hasStrokes) clearPen();        // 不管有沒有存成圖,畫布都要清掉
     notes.push(note);
     notes.sort((a, b) => a.t - b.t);
     noteBox.value = "";
@@ -1084,7 +1106,11 @@
     refreshStamp();
     refreshAddBtn();
     renderNotes();
-    showToast("已加註解 @ " + fmt(t) + (note.img ? "(含畫記)" : ""));
+    if (imgFailed) {
+      showToast("已加註解 @ " + fmt(t) + " — 但這個瀏覽器不讓我把畫記存成圖,請用文字說位置");
+    } else {
+      showToast("已加註解 @ " + fmt(t) + (note.img ? "(含畫記)" : ""));
+    }
   }
   addBtn.addEventListener("click", addNote);
   noteBox.addEventListener("keydown", (e) => {
