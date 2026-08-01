@@ -414,7 +414,7 @@ npx hyperframes render --quality standard --no-low-memory-mode --workers 3 --pro
 
 **先讀 `素材庫/預設包/對照表.md`** — 那是「情緒/字眼 → 音效 + 運鏡」的準則表,**音效跟 BGM 都已經在 `素材庫/預設包/` 裡**(音效分七類:迷因梗/介面科技/轉場/電影感/真實動作/卡通復古/遊戲;BGM 分調性),含量好的建議音量。實際有幾個、叫什麼名字**一律以對照表為準**,不要憑印象假設數量或檔名。節奏提案時照表配,不用搜。母庫 `素材庫/` 還有 keyboard/brake/lofi 等使用者累積的檔。預設包真的沒有合適的,就請使用者自己丟一個檔進 `素材庫/音效/` 或 `素材庫/背景音樂/`,選定後照常引用。下載/挑選時讓**使用者用耳朵挑** — 不要憑檔名假設它聽起來對。
 
-**BGM/音效音量用「量測法」,不要背固定值。** 先 `ffmpeg -i f.mp3 -af volumedetect -f null -` 看音量,再依實測拉:目標 BGM 大概比人聲低 18–22dB(換算 volume 常落在 0.12–0.25,但**每首不一樣** — 這次一首 mean -25dB 要拉到 0.6、另一首 -15dB 要壓到 0.12)。使用者說「當背景就好」就往更低調。小聲的音效要放大(峰值 -18dB 的大概要 6 倍才聽得到)。
+**BGM/音效音量用「量測法」,不要背固定值 — 而且要量 LUFS,不要量 volumedetect 的 mean。** mean 對中高頻音效會低報 5-6dB,照 mean 配的音效會比人聲還大聲(學員實測中招)。作法:`ffmpeg -i f.mp3 -af ebur128 -f null -` 看 Integrated I,目標:音效比人聲低 11-14dB、BGM 低 18-22dB(成品人聲是 -14 LUFS,所以音效目標約 -26、BGM 約 -34;volume 倍數 = 10^((目標-I)/20))。對照表已寫好每個檔的實測 I 跟起點 volume,直接用。使用者說「當背景就好」就往更低調。混完量一次成品 true peak,要 < -1dBTP。
 
 ```bash
 ffmpeg -y -i <專案>/工作檔/render_final.mp4 -i sfx1.mp3 -i bgm.mp3 -filter_complex "

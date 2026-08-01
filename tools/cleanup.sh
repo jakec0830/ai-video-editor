@@ -109,6 +109,13 @@ printf "確定要刪嗎? 輸入 yes 確認: "
 read -r ANS
 if [ "$ANS" = "yes" ]; then
   while IFS= read -r p; do rm -rf "$p"; done < "$TMP_LIST"
+  # hyperframes 的影格快取放在系統暫存區,不在專案裡 — 學員實測堆到 931MB
+  # 沒人清(cleanup 只掃專案資料夾掃不到)。它是純快取,刪了頂多下次 render 慢一點。
+  HF_CACHE_SIZE="$(du -sh "${TMPDIR:-/tmp}"/hyperframes-extract-cache* 2>/dev/null | awk '{s=$1} END {print s}')"
+  if [ -n "${HF_CACHE_SIZE:-}" ]; then
+    rm -rf "${TMPDIR:-/tmp}"/hyperframes-extract-cache* 2>/dev/null
+    echo "(順手清掉 hyperframes 影格快取 ${HF_CACHE_SIZE} — 純快取,不影響任何專案)"
+  fi
   echo "已清理。配方文字檔、原始影片、成品.mp4 都還在。"
   echo "下次回來:cd 進 captions/ 跑 npm install(如果刪了 node_modules)再 render 即可。"
 else

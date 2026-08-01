@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -689,6 +690,13 @@ def main() -> None:
     edl = json.loads(edl_path.read_text(encoding="utf-8"))
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
+
+    # 學員機器常見硬碟只剩幾 GB;render 中途寫不下去會半途死,錯誤訊息又看不懂。
+    # 事前警告,讓 AI 先清舊專案(tools/cleanup.sh)再跑。
+    free_gb = shutil.disk_usage(edit_dir).free / 1024**3
+    if free_gb < 3:
+        print(f"  ⚠ 硬碟只剩 {free_gb:.1f}GB — render 的分段+合成檔可能寫不下。"
+              f"建議先跑 tools/cleanup.sh 清舊專案再繼續。")
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
