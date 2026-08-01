@@ -139,6 +139,19 @@ $xxl = @( (Join-Path $KIT "tools\whisper-xxl"), (Join-Path $FREECUT "whisper-xxl
   Select-Object -First 1
 if ($xxl) { Write-Host "[OK] Faster-Whisper-XXL 獨立版已就位:$($xxl.FullName)" }
 
+# --- 3.5 先把逐字稿模型抓下來(趁現在,不要留給第一支影片)-------------------
+# 不先抓的話,學員第一次剪片會卡在一段沒輸出的 460MB 模型下載,以為當機(實測)。
+# HF_HUB_DISABLE_XET=1:HF 的 Xet 下載通道在部分網路 0 KB/s 完全卡死,關掉就正常。
+# 抓不成不算安裝失敗:第一次剪片會自動再抓,只是要多等幾分鐘。
+Write-Host "   下載逐字稿模型(Systran/faster-whisper-small,約 460MB — 幾分鐘,有進度就是還在動)..."
+$env:HF_HUB_DISABLE_XET = "1"
+& $VPY -c "from huggingface_hub import snapshot_download; snapshot_download('Systran/faster-whisper-small')"
+if ($LASTEXITCODE -eq 0) {
+  Write-Host "[OK] 逐字稿模型已就位,第一次剪片不用再等下載"
+} else {
+  Write-Host "[!] 模型這次沒抓成(多半是網路)— 不影響安裝,第一次剪片時會自動下載,屆時要多等幾分鐘"
+}
+
 # --- 4. 字型 ---------------------------------------------------------------
 Write-Host "`n--- 字型 ---"
 $fontScript = Join-Path $KIT "scripts\windows\install-font.ps1"

@@ -235,7 +235,23 @@ def main() -> None:
     html_out = build(captions, args.video, args.w, args.h, args.duration, args.font, args.style,
                      args.font_size, args.sub_bottom)
     args.out.write_text(html_out, encoding="utf-8")
+
+    # 樣式側檔:給審片頁用,讓預覽字幕跟成品同字型/字級/位置。
+    # 學員回報(五份):審片頁用自己的通用樣式,使用者對「不存在的問題」下指令
+    # (字級誤報跑出鏡、字型不對白繞兩輪)。把實際參數寫出來,審片頁直接吃。
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)px\s*", args.sub_bottom or "")
+    bottom_px = float(m.group(1)) if m else round(args.h * 0.235)  # 預設 = IG 安全區下緣
+    style_meta = {
+        "font": args.font, "families": FONTS[args.font]["families"],
+        "weight": FONTS[args.font]["weight"], "style": args.style,
+        "font_size": args.font_size, "video_w": args.w, "video_h": args.h,
+        "sub_bottom_px": bottom_px,
+    }
+    args.out.with_name("樣式.json").write_text(
+        json.dumps(style_meta, ensure_ascii=False, indent=1), encoding="utf-8")
+
     print(f"wrote {args.out}  ({len(captions)} subtitles, font={args.font}, style={args.style})")
+    print(f"wrote {args.out.with_name('樣式.json')}(審片頁同步樣式用 — 跟 captions.json 一起複製進審片區)")
     print("next: add creative layers in the marked slots → npx hyperframes lint → render")
 
 

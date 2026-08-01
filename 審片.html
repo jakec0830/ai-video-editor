@@ -950,8 +950,15 @@
     capOverlay.style.top = (vr.top - sr.top) + "px";
     capOverlay.style.width = vr.width + "px";
     capOverlay.style.height = vr.height + "px";
-    // 成品是 1080 寬配 56px 字 → 等比縮到目前顯示尺寸
-    capLine.style.fontSize = Math.max(10, vr.width * (56 / 1080)) + "px";
+    // 字級/位置跟成品同步:AI 產頁時會帶 capStyle(gen_captions 的實際參數)。
+    // 沒有 capStyle(手動拖檔)就用預設值換算,並以影片真實像素寬為準 —
+    // 以前寫死 56/1080,720 寬的片字會放大到誤報「跑出鏡」(實測回報)。
+    const cs = (window.__審片AUTO || {}).capStyle;
+    const ratio = cs ? cs.font_size / cs.video_w : 56 / (video.videoWidth || 1080);
+    capLine.style.fontSize = Math.max(10, vr.width * ratio) + "px";
+    // 位置:成品預設在 IG 安全區下緣(~23.5%),舊版寫死 12% 比成品低一截
+    const bfrac = cs ? cs.sub_bottom_px / cs.video_h : 0.235;
+    capLine.style.bottom = (bfrac * 100) + "%";
   }
 
   function updateCap() {
@@ -1426,6 +1433,17 @@
   (function () {
     const A = window.__審片AUTO;
     if (!A || !A.video) return;
+    // 預覽字幕套用成品的實際樣式(字型/粗細/樣式款)— 使用者才不會對
+    // 「不存在的問題」下指令(字型不對、黑框不對,白繞一輪那種)。
+    if (A.capStyle) {
+      const cs = A.capStyle;
+      if (cs.families) capLine.style.fontFamily =
+        cs.families.map((f) => '"' + f + '"').join(",") + ",sans-serif";
+      if (cs.weight) capLine.style.fontWeight = cs.weight;
+      if (cs.style && cs.style !== "classic") capOverlay.classList.add("st-" + cs.style);
+    } else if (A.subs && !A.burnedIn) {
+      setTimeout(() => showToast("提醒:這頁的字幕樣式是通用預覽,成品的字型/大小以 render 出來的為準"), 800);
+    }
     fileName = A.video;
     storageKey = "審片註解:" + fileName;
     video.src = A.video;

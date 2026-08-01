@@ -87,9 +87,20 @@ def main() -> int:
         # 先 parse 再 dump:確認是合法 JSON,也把內容壓成一行安全內嵌
         subs_txt = json.dumps(json.loads(subs_path.read_text(encoding="utf-8")),
                               ensure_ascii=False)
+    # 樣式側檔(gen_captions 產的):有它,審片頁的預覽字幕就跟成品同字型/字級/位置。
+    # 沒有就維持通用樣式,審片頁會提示「預覽樣式非成品」。
+    cap_style = None
+    for cand in (review_dir / "樣式.json", subs_path.with_name("樣式.json")):
+        if cand.exists():
+            try:
+                cap_style = json.loads(cand.read_text(encoding="utf-8"))
+                break
+            except (json.JSONDecodeError, OSError):
+                pass
+
     # round:這一版的戳記。審片頁比對到不一樣,就把上一輪的舊註解清掉。
     meta = {"video": video_name, "round": time.strftime("%Y%m%d-%H%M%S"),
-            "burnedIn": burned_in}
+            "burnedIn": burned_in, "capStyle": cap_style}
     inject = ("<script>window.__審片AUTO = "
               + json.dumps(meta, ensure_ascii=False)[:-1]
               + f', "subs": {subs_txt}}};</script>')

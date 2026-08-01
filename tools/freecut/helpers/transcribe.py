@@ -52,6 +52,10 @@ from pathlib import Path
 
 import requests
 
+# HF 的 Xet 下載通道在部分網路環境 0 KB/s 完全卡死(兩台學員機實測),
+# 關掉走一般 HTTP 就正常。要搶在任何 huggingface/whisper 相關 import 之前設好。
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 DEFAULT_BACKEND = "whisper"

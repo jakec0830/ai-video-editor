@@ -292,6 +292,9 @@ mkdir -p "<專案>/審片區"
 #   那個實測只在部分 Chrome 環境成立,Safari 擋 file:// 往上層抓檔,只有 Safari 的
 #   原廠 Mac(很常見)頁面會一片空白 — 學員完全無法審片還以為自己弄壞了(實測回報)。
 cp "<專案>/工作檔/captions/captions.json" "<專案>/審片區/字幕.json"
+# 樣式側檔一起帶(gen_captions 產的)— 審片頁的預覽字幕才會跟成品同字型/字級/位置,
+# 使用者不會對「不存在的問題」下指令(字級誤報跑出鏡、字型不對白繞,實測回報)
+cp "<專案>/工作檔/captions/樣式.json" "<專案>/審片區/樣式.json" 2>/dev/null || true
 # 產「開始審片.html」— 影片+字幕都內嵌好,使用者雙擊就開審,零拖檔
 "$PY" "$H/make_review_page.py" "<專案>/審片區" "../工作檔/preview_vN.mp4"
 # 收尾時換成成品:"$PY" "$H/make_review_page.py" "<專案>/審片區" "../成品.mp4"

@@ -98,6 +98,23 @@ if find "$KIT/tools/whisper-xxl" "$FREECUT/whisper-xxl" -name "faster-whisper-xx
   echo "$OK Faster-Whisper-XXL 獨立版已就位(tools/whisper-xxl/)"
 fi
 
+# --- 2.5 先把逐字稿模型抓下來(趁現在,不要留給第一支影片)---------------------
+# 不先抓的話,學員的「第一次剪片」會卡在一段沒有輸出的模型下載(約 460MB),
+# 以為當機(多台實測;兩台還因為 HF 的 Xet 通道 0 KB/s 完全卡死 — 關掉才正常)。
+# 現在本來就在「安裝要等」的心理狀態,順勢抓完,第一支影片就零等待。
+# 抓不下來(網路)不算安裝失敗:第一次剪片會自動再抓,只是要多等幾分鐘。
+if [ "$UNAME" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
+  MODEL_REPO="mlx-community/whisper-small-mlx"
+else
+  MODEL_REPO="Systran/faster-whisper-small"
+fi
+echo "   下載逐字稿模型($MODEL_REPO,約 460MB — 幾分鐘,看網速,有進度條就是還在動)..."
+if HF_HUB_DISABLE_XET=1 "$VPY" -c "from huggingface_hub import snapshot_download; snapshot_download('$MODEL_REPO')"; then
+  echo "$OK 逐字稿模型已就位,第一次剪片不用再等下載"
+else
+  echo "$WARN 模型這次沒抓成(多半是網路)— 不影響安裝,第一次剪片時會自動下載,屆時要多等幾分鐘"
+fi
+
 # --- 3. 外部工具(只檢查,不強裝)-------------------------------------------
 echo ""
 echo "--- 外部工具 ---"
