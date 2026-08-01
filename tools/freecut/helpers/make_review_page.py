@@ -19,6 +19,9 @@
 會把上一輪殘留的註解清掉 — 使用者不用再一則一則點叉叉。
 """
 import json
+import os
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -53,6 +56,24 @@ def main() -> int:
     if not (review_dir / video_name).exists():
         print(f"[X] 審片區裡沒有 {video_name} — 先把影片複製進去再產生這頁")
         return 1
+
+    # 影片一律要跟這頁同一層。以前用 ../工作檔/xxx.mp4 相對路徑省一份複製,
+    # 但 Safari 擋 file:// 往上層抓檔 → 只有 Safari 的 Mac(原廠狀態很常見)
+    # 頁面一片空白,學員以為自己弄壞了(實測回報)。
+    # macOS 用 APFS clone(秒複製、不佔額外空間),失敗退 hard link,再退真複製。
+    if "/" in video_name:
+        src = (review_dir / video_name).resolve()
+        dest = review_dir / src.name
+        if not dest.exists():
+            cloned = subprocess.run(["cp", "-c", str(src), str(dest)],
+                                    capture_output=True).returncode == 0
+            if not cloned:
+                try:
+                    os.link(src, dest)
+                except OSError:
+                    shutil.copy2(src, dest)
+        video_name = src.name
+        print(f"(影片已放進審片區同層:{video_name} — Safari 不吃 ../ 相對路徑)")
 
     html = template.read_text(encoding="utf-8")
     start = html.find(MARKER_START)

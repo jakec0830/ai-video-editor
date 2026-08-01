@@ -110,15 +110,53 @@ def merge_latin(kept, max_gap=0.12):
     return merged
 
 
+# 斷行偏好:語氣詞後面、連接詞前面,都是自然句界。
+# 學員回報(七份):舊版只看寬度硬切,詞被切兩半(「拒/絕」)、跨句硬切,
+# 幾乎每支片的字幕都要人工全部重排。寬度只當上限,句界優先。
+BREAK_AFTER = set("了嗎吧呢啊喔嘛耶啦囉唷哦呀")
+BREAK_BEFORE = ("但是", "但", "所以", "因為", "然後", "如果", "可是", "而且",
+                "還有", "接下來", "結果", "其實", "後來")
+
+
+def best_break(cur, max_width):
+    """寬度到上限要斷行時,回頭在這行裡挑「最像句界」的位置,不要在講到一半硬切。
+    評分 = 原始音訊的停頓長度 + 語氣詞/連接詞加成;位置至少要過 40% 寬,行不會太短。"""
+    total, widths = 0, []
+    for x in cur:
+        total += display_width(x["text"])
+        widths.append(total)
+    best_i, best_score = None, 0.0
+    for i in range(len(cur) - 1):
+        if widths[i] < max_width * 0.4:
+            continue
+        gap = max(0.0, cur[i + 1]["s"] - cur[i]["e"])   # pause in ORIGINAL audio
+        score = min(gap, 1.0)
+        if cur[i]["text"] and cur[i]["text"][-1] in BREAK_AFTER:
+            score += 0.25
+        if any(cur[i + 1]["text"].startswith(p) for p in BREAK_BEFORE):
+            score += 0.15
+        if score >= best_score:   # 同分取後面的(行比較滿)
+            best_i, best_score = i, score
+    return best_i if best_score > 0.02 else None
+
+
 def group_lines(words, gap_break, max_width):
     lines, cur = [], []
     for w in words:
         if cur:
             gap = w["s"] - cur[-1]["e"]          # pause in ORIGINAL audio
             width = sum(display_width(x["text"]) for x in cur)
-            if (width >= max_width * 0.6 and gap >= gap_break) or width >= max_width:
+            if width >= max_width * 0.6 and gap >= gap_break:
                 lines.append(cur)
                 cur = []
+            elif width >= max_width:
+                bi = best_break(cur, max_width)
+                if bi is not None and bi < len(cur) - 1:
+                    lines.append(cur[:bi + 1])
+                    cur = cur[bi + 1:]
+                else:
+                    lines.append(cur)
+                    cur = []
         cur.append(w)
     if cur:
         lines.append(cur)

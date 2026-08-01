@@ -1054,6 +1054,11 @@
     penCanvas.addEventListener(ev, () => { drawing = false; refreshAddBtn(); }));
 
   video.addEventListener("loadedmetadata", () => { fitPen(); fitCap(); updateCap(); });
+  // 影片載不進來時要說人話 — 空白畫面會讓新手以為是自己弄壞了(Safari 擋 ../ 實測回報)
+  video.addEventListener("error", () => {
+    if (!video.getAttribute("src")) return;
+    showToast("影片載不進來 — 不是你弄壞了,請跟 AI 說一聲「審片頁影片打不開」,它會重新整理審片區");
+  });
   window.addEventListener("resize", () => { fitPen(); fitCap(); });
 
   function refreshStamp() {
