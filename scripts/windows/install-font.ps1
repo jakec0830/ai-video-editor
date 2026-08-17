@@ -67,12 +67,16 @@ foreach ($f in $fonts) {
 Write-Host "[OK] 已安裝 $installed 個字型檔到使用者字型目錄。"
 
 # 4. 讓系統即時看到新字型(不用重開機)
+# SendMessage 是「同步」廣播:任何一個掛掉/沒在收訊息的視窗都會讓它永遠等下去
+# (學員實測卡了近 4 小時,setup 後半段全沒跑)。改用 SendMessageTimeout +
+# SMTO_ABORTIFHUNG,單一視窗最多等 1 秒就放棄 — 廣播本來就只是「即時生效」的禮貌通知,
+# AddFontResource 已經做完,收不到廣播的程式重開後一樣看得到字型。
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public static class FontNotify {
   [DllImport("gdi32.dll")] public static extern int AddFontResource(string lpFileName);
-  [DllImport("user32.dll")] public static extern int SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 }
 "@
 foreach ($f in $fonts) {
@@ -80,7 +84,9 @@ foreach ($f in $fonts) {
 }
 $HWND_BROADCAST = [IntPtr]0xffff
 $WM_FONTCHANGE  = 0x001D
-[void][FontNotify]::SendMessage($HWND_BROADCAST, $WM_FONTCHANGE, [IntPtr]::Zero, [IntPtr]::Zero)
+$SMTO_ABORTIFHUNG = 0x0002
+$result = [IntPtr]::Zero
+[void][FontNotify]::SendMessageTimeout($HWND_BROADCAST, $WM_FONTCHANGE, [IntPtr]::Zero, [IntPtr]::Zero, $SMTO_ABORTIFHUNG, 1000, [ref]$result)
 
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "[OK] 思源宋體安裝完成。"

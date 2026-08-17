@@ -77,13 +77,22 @@ UNAME_USER="$(id -un 2>/dev/null || whoami 2>/dev/null || echo user)"
 {
   # 類型被降級的話,把原始類型記在內文開頭,課程團隊還是分得出這份是什麼。
   [ "$ORIG_TYPE" != "$TYPE" ] && printf '【原始類型:%s(表單無此選項,已降級為 %s)】\n\n' "$ORIG_TYPE" "$TYPE"
+  # API 金鑰也要洗(學員回報實測:報告引用了 .env 內容,金鑰原樣送出過)。
+  # 兩條規則刻意跟上面的路徑清洗「分開跑、都用 sed -E」:BSD sed 的 BRE 模式下
+  # \| 不是「或」,整條規則會靜默失效 — 混在一起寫等於沒洗。
+  #   規則 1:XXX_KEY= / TOKEN: / "api_key": 這類「名字帶 key/token/secret/password
+  #           的賦值」,值夠長(8+)就遮掉。
+  #   規則 2:常見金鑰前綴(sk- / ghp_ / github_pat_ / xox? / AKIA / AIza / hf_),
+  #           不管出現在哪裡都遮。不用 \b 字界 — BSD sed 不認識,兩邊共用就不能用。
   sed -e "s#[Cc]:\\\\[Uu]sers\\\\${UNAME_USER}#C:\\\\Users\\\\USER#g" \
       -e "s#[Cc]:/[Uu]sers/${UNAME_USER}#C:/Users/USER#g" \
       -e "s#/c/[Uu]sers/${UNAME_USER}#/c/Users/USER#g" \
       -e "s#${HOME}#~#g" \
       -e "s#/Users/${UNAME_USER}#/Users/USER#g" \
       -e "s#/home/${UNAME_USER}#/home/USER#g" \
-      "$FILE"
+      "$FILE" \
+  | sed -E 's#([A-Za-z_-]*([Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd])[A-Za-z_-]*"?[[:space:]]*[=:][[:space:]]*"?)[A-Za-z0-9_./+-]{8,}#\1[金鑰已洗掉]#g' \
+  | sed -E 's#(sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{8,}|gho_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|xox[a-z]-[A-Za-z0-9-]{8,}|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{8,}|hf_[A-Za-z0-9]{8,})#[金鑰已洗掉]#g'
 } > "$SCRUBBED"
 
 # Windows(Git Bash)的 curl 是原生 exe:

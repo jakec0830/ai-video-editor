@@ -118,9 +118,19 @@ Write-Host "   先試 faster-whisper(pip)... 下載幾百 MB,PyPI 塞車時可�
 # violation(0xC0000005)。最陰的是 setup 全綠、import 也過 — 崩潰發生在「載入模型」,
 # 學員把影片丟進來、剪到轉逐字稿那步才炸。實測 4.5.0 正常、4.8.1 必炸。
 # 放同一行裝:舊 venv 裡已有 4.8 的話,這行也會把它降回來。
-& $VPY -m pip install faster-whisper "ctranslate2<4.6"
-& $VPY -c "import faster_whisper" 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) {
+# setuptools 也要釘 <81:ctranslate2 4.5.0 執行時 import pkg_resources,
+# setuptools 81 起已把它移除 → import faster_whisper 直接 ModuleNotFoundError。
+# 也就是說「釘 ctranslate2<4.6」自己需要這條配套,缺了它每台新裝/更新機都會炸(多名學員實測)。
+& $VPY -m pip install faster-whisper "ctranslate2<4.6" "setuptools<81"
+# 驗證 import 時暫時把 ErrorActionPreference 放回 Continue:
+# PS 5.1 在 EAP=Stop 下,原生程式的 stderr 一經重導(2>&1 / 2>$null)就變 NativeCommandError
+# 把整支 setup 砍斷 — 連「import 成功但印了個 warning」都會炸,後面字型/偏好檔全部沒跑(多名學員實測)。
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $VPY -c "import faster_whisper" 2>$null | Out-Null
+$fwOK = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEAP
+if ($fwOK) {
   Write-Host "[OK] faster-whisper 已安裝且可用"
 } else {
   Write-Host "[!] faster-whisper 裝了但無法載入(多半是 Smart App Control 擋未簽章 DLL:"

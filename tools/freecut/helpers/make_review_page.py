@@ -65,8 +65,13 @@ def main() -> int:
         src = (review_dir / video_name).resolve()
         dest = review_dir / src.name
         if not dest.exists():
-            cloned = subprocess.run(["cp", "-c", str(src), str(dest)],
-                                    capture_output=True).returncode == 0
+            # Windows 沒有 cp,subprocess 會直接丟 FileNotFoundError —
+            # 不接住的話底下的 hard link / 真複製 fallback 永遠輪不到(學員實測必炸)。
+            try:
+                cloned = subprocess.run(["cp", "-c", str(src), str(dest)],
+                                        capture_output=True).returncode == 0
+            except (FileNotFoundError, OSError):
+                cloned = False
             if not cloned:
                 try:
                     os.link(src, dest)

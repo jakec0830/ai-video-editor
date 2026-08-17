@@ -176,6 +176,48 @@ def video_display_size(video: Path) -> tuple[int, int] | None:
         return None
 
 
+def source_fps(video: Path) -> str | None:
+    """Return the source's r_frame_rate as an ffmpeg-ready string (e.g. "30000/1001"),
+    or None if it can't be determined."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+        )
+        rate = out.stdout.strip().splitlines()[0] if out.stdout.strip() else ""
+        if _fps_to_float(rate) > 0:
+            return rate
+    except (subprocess.CalledProcessError, IndexError, ValueError, ZeroDivisionError):
+        pass
+    return None
+
+
+def _fps_to_float(rate: str) -> float:
+    num, _, den = rate.partition("/")
+    return float(num) / float(den or 1)
+
+
+def output_fps_for_sources(source_paths: list[Path]) -> str:
+    """One fps for the whole render, following the sources instead of a hardcoded 24.
+
+    24 用在 30/60fps 的手機素材會規律掉格,學員看得出來(「畫面卡卡的」「嘴型對不上」,
+    多份回報)。concat 走 stream copy,所有段落必須同 fps,所以整份 EDL 只算一次:
+    取各來源中最高的(混 30+60 時,30 的段落補幀無感;反過來丟幀有感),
+    上限 60(120fps 慢動作素材照 120 輸出只會肥檔案),來源讀不到就退回 30。"""
+    best: str | None = None
+    for p in source_paths:
+        rate = source_fps(p)
+        if rate and (best is None or _fps_to_float(rate) > _fps_to_float(best)):
+            best = rate
+    if best is None:
+        return "30"
+    if _fps_to_float(best) > 60.01:
+        return "60"
+    return best
+
+
 def is_portrait_source(video: Path) -> bool:
     """Return True if the video *displays* taller than wide (portrait/vertical),
     accounting for rotation metadata. Unknown → False (safe landscape default)."""
@@ -195,6 +237,7 @@ def extract_segment(
     duration: float,
     grade_filter: str,
     out_path: Path,
+    fps: str = "30",
     preview: bool = False,
     draft: bool = False,
 ) -> None:
@@ -243,7 +286,7 @@ def extract_segment(
         "-vf", vf,
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
-        "-pix_fmt", "yuv420p", "-r", "24",
+        "-pix_fmt", "yuv420p", "-r", fps,
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
@@ -274,8 +317,11 @@ def extract_all_segments(
     ranges = edl["ranges"]
     sources = edl["sources"]
 
+    used = {r["source"] for r in ranges}
+    fps = output_fps_for_sources([resolve_path(sources[n], edit_dir) for n in used])
+
     seg_paths: list[Path] = []
-    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/")
+    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  (fps: {fps})")
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
     for i, r in enumerate(ranges):
@@ -295,7 +341,7 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft)
+        extract_segment(src_path, start, duration, seg_filter, out_path, fps=fps, preview=preview, draft=draft)
         seg_paths.append(out_path)
 
     return seg_paths

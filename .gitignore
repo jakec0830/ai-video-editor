@@ -1,3 +1,7 @@
+# API 金鑰檔（find_stock.py 這類選配工具用 — 絕不 commit）
+.env
+**/.env
+
 # Python 環境（每台機器由 setup.sh 重建 — 絕不 commit）
 tools/freecut/.venv/
 **/__pycache__/
