@@ -1020,6 +1020,7 @@
     hasStrokes = false;
     refreshAddBtn();     // 同上:清除後按鈕要變回不能按
   }
+  let lastCapturePenOnly = false;   // 上一次截圖是不是「只有紅筆」(合成被 file:// 擋掉時)
   function captureAnnotated() {
     // 把「當下這格影片 + 紅筆畫記」合成一張圖(顯示解析度就夠 AI 看位置)
     // 存不下來就回傳 null(不要 throw)—— 見下面的 SecurityError 說明。
@@ -1033,10 +1034,19 @@
     //   drawImage 本身不會丟,所以只包 drawImage 是抓不到的。
     //   以前沒包 → 這個 throw 會從 addNote() 裡竄出去,註解根本沒被加進去,
     //   使用者看到的就是「有畫畫的時候,加註解按了沒反應」。
+    lastCapturePenOnly = false;
     try {
       return c.toDataURL("image/png");
     } catch (e) {
-      return null;
+      // 合成圖被擋(見上面的 SecurityError 說明)。但紅筆那層畫布沒碰過影片、
+      // 是乾淨的 —— 位置資訊全在筆跡上,AI 手上有影片檔+秒數,底圖它自己抽。
+      // 所以退而求其次:只存筆跡(透明底),註解文字會告訴 AI 怎麼對回影格。
+      try {
+        lastCapturePenOnly = true;
+        return penCanvas.toDataURL("image/png");
+      } catch (e2) {
+        return null;
+      }
     }
   }
 
@@ -1120,7 +1130,7 @@
     const note = { id: Date.now() + Math.random(), t: t, text: text };
     const line = subLineFor(t);
     if (line) note.line = line.text;   // 錨在字幕句上(比秒數準)
-    if (img) note.img = img;
+    if (img) { note.img = img; if (lastCapturePenOnly) note.imgPenOnly = true; }
     if (hasStrokes) clearPen();        // 不管有沒有存成圖,畫布都要清掉
     notes.push(note);
     notes.sort((a, b) => a.t - b.t);
@@ -1305,7 +1315,9 @@
       } else {
         line = "[" + fmt(n.t) + "] " + n.text;
       }
-      if (n.img) line += "(附畫記圖 " + imgName(n.t) + ",紅筆是位置)";
+      if (n.img) line += n.imgPenOnly
+        ? "(附畫記圖 " + imgName(n.t) + " — 圖上只有紅筆沒有底圖,底圖請用 ffmpeg 抽 " + fmt(n.t) + " 的影格疊起來看,紅筆是位置)"
+        : "(附畫記圖 " + imgName(n.t) + ",紅筆是位置)";
       lines.push(line);
     });
     lines.push("");
