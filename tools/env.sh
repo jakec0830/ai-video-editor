@@ -25,3 +25,9 @@ case ":$PATH:" in
   *":/usr/local/bin:"*) ;;
   *) [ -x /usr/local/bin/brew ] && eval "$(/usr/local/bin/brew shellenv)" ;;
 esac
+
+# Python 一律用 UTF-8(讀寫檔、印到主控台)。繁中 Windows 預設 cp950:helper 印「⋯」這類
+# 字會直接 UnicodeEncodeError 死掉、中文輸出變亂碼 AI 看不懂(學員回報 2026-08-30 / 09-12)。
+# Mac/Linux 本來就是 UTF-8,設了沒差。
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8

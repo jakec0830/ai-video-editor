@@ -37,6 +37,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sound_map import pcm, envelope, find_transients, WIN   # 同一個資料夾
 
+# 繁中 Windows 主控台是 cp950,印「⋯」會 UnicodeEncodeError 整支死掉(學員回報 2026-09-12)。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 def mean_volume(video):
     """This file's own average loudness (dBFS), via ffmpeg volumedetect.
     Used to set the GAP threshold RELATIVE to the recording, not a fixed dB —
