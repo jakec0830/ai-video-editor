@@ -44,15 +44,18 @@ fi
 MEDIA_EXT=(mp4 mov m4v webm mkv wav mp3 m4a aac png jpg jpeg gif)
 BIG_DIRS=(node_modules clips_preview __pycache__ chk .hyperframes)
 
-# ★ 合成用到的「圖片素材」不能刪。它們被 index.html 直接引用(例如從素材庫複製
-# 進來的 clawd.png),而且**不是配方能重生的** — 刪掉之後重跑 render 不會報錯,
-# 只是畫面上那個元素安靜地消失,學員根本不會發現。圖片都很小(通常幾十 KB),
-# 留著幾乎不佔空間。影片/音檔不在此列:那些大、而且重跑 render.py 就會再生。
+# ★ 合成用到的素材不能刪:圖片、b-roll 影片、去背切出來的人(fg*.webm)、音檔。
+# 它們被 index.html 直接引用,而且**不是配方能重生的** — 刪掉之後重跑 render 不會報錯,
+# 只是畫面上那個元素安靜地消失,學員根本不會發現。
+# (學員回報兩次:b-roll 影片被刪,因為這裡原本只保護圖片。)
+# 唯一例外是主畫面 a-roll(id="a-roll" / "a-roll-audio"):它很大,而且重跑 render.py 就會再生。
+MEDIA_REF='png|jpg|jpeg|gif|svg|webp|mp4|mov|m4v|webm|mkv|wav|mp3|m4a|aac'
 KEEP_RE=""
 for html in $(find "${SCAN_DIRS[@]}" -type f -name "*.html" 2>/dev/null); do
-  # 抓 src="..." / href="..." / url(...) 裡的本機圖片檔名
-  refs="$(grep -oE '(src|href)="[^"]+\.(png|jpg|jpeg|gif|svg|webp)"|url\((["'"'"']?)[^)"'"'"']+\.(png|jpg|jpeg|gif|svg|webp)' "$html" 2>/dev/null \
-          | grep -oE '[^/"'"'"'(=]+\.(png|jpg|jpeg|gif|svg|webp)' || true)"
+  # 抓 src="..." / href="..." / url(...) 裡的本機素材檔名;a-roll 那兩行跳過
+  refs="$(grep -vE 'id="a-roll(-audio)?"' "$html" 2>/dev/null \
+          | grep -oE "(src|href)=\"[^\"]+\.($MEDIA_REF)\"|url\(([\"']?)[^)\"']+\.($MEDIA_REF)" \
+          | grep -oE "[^/\"'(=]+\.($MEDIA_REF)" || true)"
   for r in $refs; do
     KEEP_NAMES="${KEEP_NAMES:-}${KEEP_NAMES:+ }$r"
   done
@@ -62,7 +65,7 @@ KEEP_NAMES="$(printf '%s\n' ${KEEP_NAMES:-} | sort -u | tr '\n' ' ' | sed 's/ $/
 for r in $KEEP_NAMES; do
   KEEP_RE="${KEEP_RE}${KEEP_RE:+|}$(printf '%s' "$r" | sed 's/[.[\*^$]/\\&/g')"
 done
-[ -n "$KEEP_RE" ] && echo "保留合成用到的圖片素材(刪了 render 會靜默少東西): $KEEP_NAMES" && echo ""
+[ -n "$KEEP_RE" ] && echo "保留合成用到的素材(圖片、b-roll、去背檔;刪了 render 會靜默少東西): $KEEP_NAMES" && echo ""
 
 echo "掃描: ${SCAN_DIRS[*]}"
 echo ""
@@ -78,11 +81,11 @@ for dir in "${SCAN_DIRS[@]}"; do
   done
 done
 
-# 把「合成有引用到的圖片」從刪除清單裡剔除
+# 把「合成有引用到的素材」從刪除清單裡剔除
 if [ -n "$KEEP_RE" ]; then
   KEPT="$(grep -cE "/($KEEP_RE)\$" "$TMP_LIST" 2>/dev/null || true)"
   grep -vE "/($KEEP_RE)\$" "$TMP_LIST" > "$TMP_LIST.f" 2>/dev/null && mv "$TMP_LIST.f" "$TMP_LIST"
-  [ "${KEPT:-0}" -gt 0 ] && echo "(已從刪除清單剔除 ${KEPT} 個合成引用到的圖片)"
+  [ "${KEPT:-0}" -gt 0 ] && echo "(已從刪除清單剔除 ${KEPT} 個合成引用到的素材)"
 fi
 
 if [ ! -s "$TMP_LIST" ]; then
@@ -102,7 +105,7 @@ echo "會保留(專案配方,重做只要重跑 render):"
 echo "  - edl.json、transcripts/(逐字稿 + words.txt)"
 echo "  - captions/index.html、captions/captions.json、fixes.json、build 設定"
 echo "  - 專案筆記.md、任何 .md / .srt / .txt"
-echo "  - 合成(index.html)引用到的圖片素材 — 刪了 render 會靜默少東西"
+echo "  - 合成(index.html)引用到的素材(圖片、b-roll、去背檔)— 刪了 render 會靜默少東西"
 echo "  - 原始影片、成品.mp4(在專案最上層,本來就不動)"
 echo ""
 printf "確定要刪嗎? 輸入 yes 確認: "
