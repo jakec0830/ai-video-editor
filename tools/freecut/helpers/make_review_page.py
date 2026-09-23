@@ -64,7 +64,13 @@ def main() -> int:
     if "/" in video_name:
         src = (review_dir / video_name).resolve()
         dest = review_dir / src.name
-        if not dest.exists():
+        # 同名舊檔一定要換掉:以前只在「不存在」時才複製,重出新版後審片區永遠停在
+        # 第一版,訊息卻照印「已放進」— 學員連續兩支片審到舊片(回報 2026-09-10 / 09-14)。
+        # hard link 過來的(samefile)本來就會跟著來源變,不用動。
+        if dest.exists() and not dest.samefile(src):
+            dest.unlink()
+        copied = not dest.exists()
+        if copied:
             # Windows 沒有 cp,subprocess 會直接丟 FileNotFoundError —
             # 不接住的話底下的 hard link / 真複製 fallback 永遠輪不到(學員實測必炸)。
             try:
@@ -78,7 +84,10 @@ def main() -> int:
                 except OSError:
                     shutil.copy2(src, dest)
         video_name = src.name
-        print(f"(影片已放進審片區同層:{video_name} — Safari 不吃 ../ 相對路徑)")
+        if copied:
+            print(f"(影片已放進審片區同層:{video_name} — Safari 不吃 ../ 相對路徑)")
+        else:
+            print(f"(審片區的 {video_name} 跟來源是同一個檔,不用重複製)")
 
     html = template.read_text(encoding="utf-8")
     start = html.find(MARKER_START)
@@ -105,6 +114,7 @@ def main() -> int:
 
     # round:這一版的戳記。審片頁比對到不一樣,就把上一輪的舊註解清掉。
     meta = {"video": video_name, "round": time.strftime("%Y%m%d-%H%M%S"),
+            "project": review_dir.resolve().parent.name,
             "burnedIn": burned_in, "capStyle": cap_style}
     inject = ("<script>window.__審片AUTO = "
               + json.dumps(meta, ensure_ascii=False)[:-1]

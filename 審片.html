@@ -396,6 +396,9 @@
   let fileName = "";
   let frozen = null;      // 開始打字時凍結的時間點;null = 跟著播放頭
   let storageKey = "";
+  // 自動模式的專案名前綴:不同專案的影片常常同名(preview_v1.mp4 / 成品.mp4),
+  // 而 file:// 頁面共用同一份 localStorage — 不加前綴,A 片的註解會混進 B 片(學員回報 2026-09-06)。
+  let keyNs = "";
   let penMode = false, drawing = false, hasStrokes = false;
 
   // ---- 字幕軌 ----
@@ -451,7 +454,7 @@
     return out;
   }
 
-  function subsKey() { return fileName ? "審片字幕:" + fileName : ""; }
+  function subsKey() { return fileName ? "審片字幕:" + keyNs + fileName : ""; }
 
   // 字幕的每個動作(改字/斷句/併句)都變成一則「註解」進下面的列表 —
   // 一個地方看到全部要改的東西,匯出也在同一串裡。
@@ -1468,14 +1471,15 @@
       setTimeout(() => showToast("提醒:這頁的字幕樣式是通用預覽,成品的字型/大小以 render 出來的為準"), 800);
     }
     fileName = A.video;
-    storageKey = "審片註解:" + fileName;
+    keyNs = A.project ? A.project + "/" : "";
+    storageKey = "審片註解:" + keyNs + fileName;
     video.src = A.video;
     video.classList.add("loaded");
     stage.classList.remove("empty");
     drophint.style.display = "none";
     // 這一版的輪次戳記跟上次開的不一樣 = AI 出了新的一版,上一輪的註解已經改完了,
     // 不要再帶回來(不然使用者每次進來都要一則一則點叉叉關掉)。
-    const roundKey = "審片輪次:" + fileName;
+    const roundKey = "審片輪次:" + keyNs + fileName;
     let freshRound = false;
     try {
       if (A.round && localStorage.getItem(roundKey) !== A.round) {
