@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>特效型錄</title>
+<style>
+  :root {
+    --bg: #f6f3ee; --card: #ffffff; --ink: #1f1a15; --muted: #6f655a; --line: #e6ded3;
+    --accent: #d9480f; --chip: #f1ebe2; --chip-ink: #5a4f44; --free: #1a7f45; --cost: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151311; --card: #1f1c19; --ink: #f1ece6; --muted: #a79d92; --line: #332e29;
+      --accent: #ff7a45; --chip: #2a2622; --chip-ink: #cfc5ba; --free: #4ade80; --cost: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+         line-height: 1.6; padding: 32px 16px 64px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: .02em; }
+  .lead { color: var(--muted); margin-top: 8px; max-width: 720px; }
+  .note { margin-top: 18px; padding: 14px 18px; border-radius: 14px; background: var(--card); border: 1px solid var(--line);
+          font-size: 15px; max-width: 720px; }
+  .note b { color: var(--accent); }
+  h2 { font-size: 19px; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .card video { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; background: #000; display: block; }
+  .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .body h3 { font-size: 17px; font-weight: 800; }
+  .feel { font-size: 14px; }
+  .when { font-size: 13px; color: var(--muted); }
+  .when span { font-weight: 700; color: var(--chip-ink); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .tag { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--chip); color: var(--chip-ink); }
+  .tag.free { color: var(--free); }
+  .tag.cost { color: var(--cost); }
+  footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>特效型錄</h1>
+  <p class="lead">剪片時 AI 手上有的工具,每個都附一段範例。看看長什麼樣子就好。</p>
+  <div class="note">
+    <b>這是參考,不是菜單。</b>剪你的影片時,AI 會讀完你講的內容,提出「這支的哪幾句,適合用哪幾個」,每一個都會說為什麼。
+    你只要說好、或說「這個不要」「換一個」。同一個工具在不同影片會長得不一樣:內容一定是你講的事、你的行業。
+  </div>
+
+  <h2>大字類(一支挑 1–3 個,放在最有力的那一句)</h2>
+  <div class="grid">
+    <div class="card">
+      <video src="clips/01-開場字卡.mp4" poster="posters/01-開場字卡.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>開場字卡轟炸</h3>
+        <p class="feel">話變成一張張大字卡,在頭上方硬切換下一張,關鍵那張紅字砸進來。很衝,像廣告開頭。</p>
+        <p class="when"><span>常見時機:</span>開頭鉤子、最有力的一句宣言(句子短才好看)</p>
+        <div class="tags"><span class="tag free">不用去背</span><span class="tag">便宜</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/02-重點重擊.mp4" poster="posters/02-重點重擊.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>重點重擊</h3>
+        <p class="feel">最重的那幾個字超大、亮黃,一個字一個字砸下來。只用在那幾個字,前後照一般字幕。</p>
+        <p class="when"><span>常見時機:</span>轉折句、結論句裡最短的重點</p>
+        <div class="tags"><span class="tag free">不用去背</span><span class="tag">便宜</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/03-頭後大字-情緒.mp4" poster="posters/03-頭後大字-情緒.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>頭後大字(情緒)</h3>
+        <p class="feel">關鍵詞變超大字,放在頭的後面,頭髮擋住字的下半部。電影海報感。</p>
+        <p class="when"><span>常見時機:</span>情緒最高點的那個詞</p>
+        <div class="tags"><span class="tag cost">要去背(多跑一步)</span><span class="tag">背景越單純越好</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/03-頭後大字-數字.mp4" poster="posters/03-頭後大字-數字.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>頭後大字(數字)</h3>
+        <p class="feel">同上,換成黃色,字從下往上浮出來。</p>
+        <p class="when"><span>常見時機:</span>最想讓人記住的數字、時間、金額</p>
+        <div class="tags"><span class="tag cost">要去背(多跑一步)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>字幕強調(小變化,一支 2–4 個)</h2>
+  <div class="grid">
+    <div class="card">
+      <video src="clips/04-字幕手繪圈.mp4" poster="posters/04-字幕手繪圈.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>手繪圈</h3>
+        <p class="feel">紅筆把一個詞圈起來,像老師批改。</p>
+        <p class="when"><span>常見時機:</span>痛點、問題、「就是這個」</p>
+        <div class="tags"><span class="tag free">幾乎零成本</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/04-字幕手繪底線.mp4" poster="posters/04-字幕手繪底線.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>手繪底線</h3>
+        <p class="feel">黃色筆刷在詞下面畫一條線,詞彈一下。</p>
+        <p class="when"><span>常見時機:</span>數字、關鍵字</p>
+        <div class="tags"><span class="tag free">幾乎零成本</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/04-字幕整框翻色.mp4" poster="posters/04-字幕整框翻色.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>整框翻色</h3>
+        <p class="feel">整個字幕框瞬間變黃底黑字、彈一下。最「突然」的一種。</p>
+        <p class="when"><span>常見時機:</span>轉折的那一句、「交給 AI」這種決定性的話</p>
+        <div class="tags"><span class="tag free">幾乎零成本</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>動態 b-roll + 畫面讓位(沒有拍到畫面時,用動畫把那句話演出來)</h2>
+  <div class="grid">
+    <div class="card">
+      <video src="clips/05-06-縮成卡片-情緒堆疊.mp4" poster="posters/05-06-縮成卡片-情緒堆疊.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>縮成卡片 + 情緒堆疊</h3>
+        <p class="feel">人縮成中間卡片,周圍一直堆東西、警示從四面八方逼近,最後全部掉下去、人放回來。</p>
+        <p class="when"><span>常見時機:</span>「很亂、很煩、很多」,表情本身就是重點的時候</p>
+        <div class="tags"><span class="tag free">不用去背</span><span class="tag">內容換成你的行業</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <video src="clips/05-06-角落小窗-流程面板.mp4" poster="posters/05-06-角落小窗-流程面板.jpg" controls muted loop playsinline preload="metadata"></video>
+      <div class="body">
+        <h3>角落小窗 + 流程面板</h3>
+        <p class="feel">人縮到角落,面板演出步驟:打字、標時間、劃掉壞的、打勾完成。講完人放大回來。</p>
+        <p class="when"><span>常見時機:</span>「先…然後…接著…最後…」這種步驟說明</p>
+        <div class="tags"><span class="tag free">不用去背</span><span class="tag">也可以整個蓋掉、不縮</span></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>範例片段來自「剪輯課demo」。做法給 AI 看的說明在 <code>tools/特效工具箱.md</code>。</footer>
+</div>
+<script>
+  // 滑到才播(省電),離開就停
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    try { e.isIntersecting ? e.target.play() : e.target.pause(); } catch (_) {}
+  }), { threshold: 0.4 });
+  document.querySelectorAll("video").forEach(v => io.observe(v));
+</script>
+</body>
+</html>

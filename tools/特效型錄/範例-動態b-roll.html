@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<!--
+  給 AI:這是「動態 b-roll」驗證過的完整範例(剪輯課demo 其中 24 秒)。不是拿來直接跑的專案(assets/seg.mp4 不在這裡),
+  是讓你照抄骨架、換成這支影片的內容:
+    - Beat A「情緒堆疊」:搜尋 overwhelm(便利貼 .note + 警示通知 .toast + 人縮成卡片)
+    - Beat C「流程說明面板」:搜尋 explain(狀態膠囊 .st + 波形 #wave + 逐字稿列 .row 打字/劃掉/收起/打勾 + 人縮到左上角)
+    - 字幕強調:搜尋 ring1(手繪圈)、under1(手繪底線)、flip1(整框翻色)
+  內容(便利貼寫什麼、面板演什麼)一定要換成「這個學員講的事 + 他的行業」,不要原封不動搬。說明見 tools/特效工具箱.md。
+-->
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family:"Source Han Serif TC VF"; src: local("Source Han Serif TC VF"); }
+      @font-face { font-family:"Source Han Serif TC"; src: local("Source Han Serif TC"); }
+      @font-face { font-family:"PingFang TC"; src: local("PingFang TC"); }
+      * { margin:0; padding:0; box-sizing:border-box; }
+      html, body { width:1080px; height:1920px; overflow:hidden; background:#000; }
+      #root { position:absolute; inset:0;
+        --safe-top:221px; --safe-bottom:451px; --safe-left:54px; --safe-right:119px; }
+
+      /* ---------- captions (same classic style as the kit) ---------- */
+      .sub { position:absolute; left:50%; bottom:340px; transform:translateX(-50%);
+        max-width:calc(100% - 2*var(--safe-right)); text-align:center; z-index:20;
+        font-family:"Source Han Serif TC VF","Source Han Serif TC",serif; font-weight:600;
+        font-size:66px; line-height:1.32; color:#fff; white-space:nowrap; }
+      .sub-inner { display:inline-block; padding:10px 26px; border-radius:14px;
+        background:rgba(0,0,0,0.72); box-shadow:0 4px 18px rgba(0,0,0,0.35); }
+      .kw { color:#FFD400; }
+
+      /* caption emphasis: hand-drawn circle / underline sit on the word */
+      .mark { position:relative; display:inline-block; }
+      .mark .t { position:relative; z-index:2; }
+      .mark svg { position:absolute; z-index:1; overflow:visible; pointer-events:none; }
+      .mark.circle svg { left:-22%; top:-38%; width:144%; height:176%; }
+      .mark.under svg  { left:-4%; bottom:-30px; width:108%; height:26px; }
+
+      /* ---------- stage backgrounds (sit under the a-roll, seen when it shrinks) ---------- */
+      .stage { position:absolute; inset:0; z-index:0; }
+      #bg-dark  { background:radial-gradient(120% 80% at 50% 42%, #2a211b 0%, #120e0b 70%); }
+      #bg-light { background:#f4efe6;
+        background-image:radial-gradient(rgba(60,40,20,.10) 2px, transparent 2px);
+        background-size:36px 36px; }
+
+      /* ---------- Beat A: overwhelm-surround ---------- */
+      #overwhelm { position:absolute; left:0; top:0; width:100%; z-index:3; pointer-events:none;
+        font-family:"PingFang TC",sans-serif; }
+      .note { position:absolute; width:230px; padding:22px 18px 26px; border-radius:6px;
+        font-weight:700; font-size:40px; color:#2b2118; text-align:center;
+        box-shadow:0 10px 24px rgba(0,0,0,.45); opacity:0; }
+      .note small { display:block; font-size:22px; font-weight:600; opacity:.55; margin-bottom:6px; letter-spacing:.1em; }
+      .toast { position:absolute; display:flex; align-items:center; gap:16px;
+        padding:18px 26px; border-radius:18px; background:#fff; color:#1c1c1e;
+        font-weight:700; font-size:36px; white-space:nowrap;
+        box-shadow:0 14px 34px rgba(0,0,0,.5); border-left:10px solid #ff3b30; opacity:0; }
+      .toast i { font-style:normal; display:inline-flex; width:48px; height:48px; border-radius:50%;
+        background:#ff3b30; color:#fff; font-size:32px; align-items:center; justify-content:center; }
+
+      /* ---------- Beat C: agent-progress-theater ---------- */
+      #explain { position:absolute; left:0; top:0; width:100%; z-index:3; pointer-events:none;
+        font-family:"PingFang TC",sans-serif; color:#231a12; }
+      #ex-head { position:absolute; left:380px; top:250px; width:620px; opacity:0; }
+      #ex-head h3 { font-size:54px; font-weight:800; letter-spacing:.02em; }
+      #status { position:relative; margin-top:18px; height:74px; }
+      .st { position:absolute; left:0; top:0; display:inline-flex; align-items:center; gap:14px;
+        padding:12px 26px 12px 16px; border-radius:40px; background:#fff; font-size:36px; font-weight:700;
+        box-shadow:0 6px 18px rgba(80,50,20,.15); opacity:0; white-space:nowrap; }
+      .st .spin { width:42px; height:42px; }
+      .st.work { color:#d9480f; }
+      .st.done { color:#1a9c4b; }
+      #wave { position:absolute; left:380px; top:430px; width:600px; height:230px; opacity:0; }
+      #wave .bars { position:absolute; left:0; top:40px; width:600px; height:150px; display:flex; align-items:center; gap:6px; }
+      #wave .bars span { flex:1; background:#d9480f; border-radius:4px; opacity:.85; transform-origin:50% 50%; }
+      #wave .tick { position:absolute; top:0; width:4px; height:230px; background:#231a12; border-radius:2px; opacity:0; transform-origin:50% 0; }
+      #panel { position:absolute; left:70px; top:760px; width:940px; height:680px; border-radius:34px;
+        background:#fff; box-shadow:0 24px 60px rgba(80,50,20,.22); opacity:0; overflow:hidden; }
+      #panel .lbl { position:absolute; left:44px; top:30px; font-size:28px; font-weight:700; color:#9a8a78; letter-spacing:.2em; }
+      .row { position:absolute; left:30px; width:880px; height:80px; display:flex; align-items:center; gap:22px;
+        padding:0 18px; border-radius:16px; transform-origin:50% 50%; }
+      .row .ts { flex:none; width:150px; text-align:center; padding:8px 0; border-radius:12px;
+        background:#231a12; color:#ffd400; font:700 28px "SF Mono","Menlo",monospace; opacity:0; }
+      .row .tx { flex:1; font-size:40px; font-weight:600; white-space:nowrap; position:relative; }
+      .row .tx .ch { opacity:0; }
+      .row .strike { position:absolute; left:-6px; right:-6px; top:50%; height:6px; margin-top:-3px;
+        background:#ff3b30; border-radius:3px; transform:scaleX(0); transform-origin:left center; }
+      .row .ok { flex:none; width:54px; height:54px; border-radius:50%; background:#1a9c4b; opacity:0;
+        display:flex; align-items:center; justify-content:center; }
+      .row.ng .tx { color:#8a7c6c; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.433" data-width="1080" data-height="1920">
+
+      <!-- stage backgrounds -->
+      <div id="bg-dark"  class="clip stage" data-start="1.0"  data-duration="5.4" data-track-index="1"></div>
+      <div id="bg-light" class="clip stage" data-start="13.5" data-duration="9.5" data-track-index="1"></div>
+
+      <!-- a-roll -->
+      <video id="a-roll" class="clip" src="assets/seg.mp4" muted playsinline data-start="0" data-duration="24.433" data-track-index="0"
+             style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;"></video>
+      <audio id="a-roll-audio" src="assets/seg.mp4" data-start="0" data-duration="24.433" data-track-index="2" data-volume="1"></audio>
+
+      <!-- ===== Beat A: 想拍的一大堆 → 剪輯頭很痛 → 不想面對 (overwhelm-surround) ===== -->
+      <div id="overwhelm" class="clip" data-start="1.1" data-duration="5.2" data-track-index="3">
+        <div class="note" id="n1" style="left:40px;  top:300px; background:#ffe066;"><small>想拍</small>開箱新品</div>
+        <div class="note" id="n2" style="left:810px; top:280px; background:#ffc9de;"><small>想拍</small>客戶見證</div>
+        <div class="note" id="n3" style="left:30px;  top:640px; background:#b2f2bb;"><small>想拍</small>教學影片</div>
+        <div class="note" id="n4" style="left:820px; top:620px; background:#a5d8ff;"><small>想拍</small>幕後花絮</div>
+        <div class="note" id="n5" style="left:425px; top:236px; background:#ffd8a8;"><small>想拍</small>活動預告</div>
+        <div class="note" id="n6" style="left:40px;  top:980px; background:#e5dbff;"><small>想拍</small>前後對比</div>
+        <div class="note" id="n7" style="left:800px; top:960px; background:#ffe066;"><small>想拍</small>常見問題</div>
+        <div class="note" id="n8" style="left:430px; top:1250px; background:#b2f2bb;"><small>想拍</small>老闆日常</div>
+
+        <div class="toast" id="t1" style="left:90px;  top:470px;"><i>!</i>字幕還沒上</div>
+        <div class="toast" id="t2" style="left:590px; top:1090px;"><i>!</i>音效找不到</div>
+        <div class="toast" id="t3" style="left:70px;  top:1130px;"><i>✕</i>輸出失敗</div>
+        <div class="toast" id="t4" style="left:540px; top:380px;"><i>!</i>剪到一半當機</div>
+        <div class="toast" id="t5" style="left:250px; top:1300px;"><i>⏱</i>又要 2 小時…</div>
+      </div>
+
+      <!-- ===== Beat C: 轉文字 → 標節點 → 自己工作 → 剪順 (agent-progress-theater) ===== -->
+      <div id="explain" class="clip" data-start="13.6" data-duration="9.3" data-track-index="3">
+        <div id="ex-head">
+          <h3>AI 正在剪你的片</h3>
+          <div id="status">
+            <div class="st work" id="st1"><svg class="spin" viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="#f1d3c2" stroke-width="6"/><path d="M21 5 A16 16 0 0 1 37 21" fill="none" stroke="#d9480f" stroke-width="6" stroke-linecap="round"/></svg>轉成文字中…</div>
+            <div class="st work" id="st2"><svg class="spin" viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="#f1d3c2" stroke-width="6"/><path d="M21 5 A16 16 0 0 1 37 21" fill="none" stroke="#d9480f" stroke-width="6" stroke-linecap="round"/></svg>標出每一秒的節點…</div>
+            <div class="st work" id="st3"><svg class="spin" viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="#f1d3c2" stroke-width="6"/><path d="M21 5 A16 16 0 0 1 37 21" fill="none" stroke="#d9480f" stroke-width="6" stroke-linecap="round"/></svg>自動剪掉 NG…</div>
+            <div class="st done" id="st4"><svg viewBox="0 0 42 42" width="42" height="42"><circle cx="21" cy="21" r="19" fill="#1a9c4b"/><path d="M12 22 L18.5 28 L30 15" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>剪順了</div>
+          </div>
+        </div>
+
+        <div id="wave">
+          <div class="bars" id="bars"></div>
+          <div class="tick" id="k1" style="left:40px;"></div>
+          <div class="tick" id="k2" style="left:150px;"></div>
+          <div class="tick" id="k3" style="left:250px;"></div>
+          <div class="tick" id="k4" style="left:360px;"></div>
+          <div class="tick" id="k5" style="left:450px;"></div>
+          <div class="tick" id="k6" style="left:550px;"></div>
+        </div>
+
+        <div id="panel">
+          <div class="lbl">逐字稿</div>
+          <div class="row"    id="r1" style="top:90px;"><div class="ts">00:00.1</div><div class="tx">你現在看到的這支影片</div><div class="ok"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M6 16 L12 22 L24 9" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+          <div class="row ng" id="r2" style="top:180px;"><div class="ts">00:01.4</div><div class="tx">呃…等一下，我重講<span class="strike"></span></div></div>
+          <div class="row"    id="r3" style="top:270px;"><div class="ts">00:03.2</div><div class="tx">是完全由 AI 剪的</div><div class="ok"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M6 16 L12 22 L24 9" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+          <div class="row ng" id="r4" style="top:360px;"><div class="ts">00:05.0</div><div class="tx">（停頓 1.8 秒）<span class="strike"></span></div></div>
+          <div class="row"    id="r5" style="top:450px;"><div class="ts">00:06.9</div><div class="tx">包含字幕、音效</div><div class="ok"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M6 16 L12 22 L24 9" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+          <div class="row"    id="r6" style="top:540px;"><div class="ts">00:08.6</div><div class="tx">剪接、還有特效</div><div class="ok"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M6 16 L12 22 L24 9" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+        </div>
+      </div>
+
+      <!-- ===== captions (segment-local times = output time - 9.6) ===== -->
+      <div id="sub-5"  class="clip sub" data-start="0.0"   data-duration="1.22"  data-track-index="5"><span class="sub-inner">你是不是也覺得跟我一樣</span></div>
+      <div id="sub-6"  class="clip sub" data-start="1.22"  data-duration="1.53"  data-track-index="5"><span class="sub-inner">想拍的東西一大堆</span></div>
+      <div id="sub-7"  class="clip sub" data-start="2.75"  data-duration="2.5"   data-track-index="5"><span class="sub-inner">但每次想到要剪輯就<span class="mark circle"><span class="t">頭很痛</span><svg viewBox="0 0 260 110" preserveAspectRatio="none"><path id="ring1" d="M34 30 C 70 6, 200 4, 240 34 C 268 58, 236 98, 150 104 C 70 108, 14 92, 12 62 C 10 38, 44 22, 96 16" fill="none" stroke="#ff3b30" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg></span></span></div>
+      <div id="sub-8"  class="clip sub" data-start="5.25"  data-duration="1.35"  data-track-index="5"><span class="sub-inner">甚至不想面對</span></div>
+      <div id="sub-9"  class="clip sub" data-start="6.6"   data-duration="1.3"   data-track-index="5"><span class="sub-inner">我以前剪一次影片</span></div>
+      <div id="sub-10" class="clip sub" data-start="7.9"   data-duration="1.5"   data-track-index="5"><span class="sub-inner">大概要花<span class="mark under"><span class="t kw" id="kw2h">兩個小時</span><svg viewBox="0 0 300 26" preserveAspectRatio="none"><path id="under1" d="M4 16 C 60 6, 120 22, 180 12 S 270 8, 296 14" fill="none" stroke="#FFD400" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg></span></span></div>
+      <div id="sub-11" class="clip sub" data-start="9.4"   data-duration="2.05"  data-track-index="5"><span class="sub-inner">現在我只要把話說好</span></div>
+      <div id="sub-12" class="clip sub" data-start="11.45" data-duration="1.3"   data-track-index="5"><span class="sub-inner" id="flip1">剩下的丟給 AI</span></div>
+      <div id="sub-13" class="clip sub" data-start="12.75" data-duration="1.1"   data-track-index="5"><span class="sub-inner">它就幫我完成了</span></div>
+      <div id="sub-14" class="clip sub" data-start="13.85" data-duration="2.17"  data-track-index="5"><span class="sub-inner">它會先把我的話轉成文字</span></div>
+      <div id="sub-15" class="clip sub" data-start="16.02" data-duration="2.53"  data-track-index="5"><span class="sub-inner">然後每一秒都標出它的節點</span></div>
+      <div id="sub-16" class="clip sub" data-start="18.55" data-duration="1.7"   data-track-index="5"><span class="sub-inner">接著它就自己去工作</span></div>
+      <div id="sub-17" class="clip sub" data-start="20.25" data-duration="2.0"   data-track-index="5"><span class="sub-inner">把我整段都剪順</span></div>
+      <div id="sub-18" class="clip sub" data-start="22.25" data-duration="2.183" data-track-index="5"><span class="sub-inner">剪成你現在所看到的完成品</span></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      /* ---- deterministic DOM setup ---- */
+      // waveform bars: fixed pseudo-random heights (no Math.random)
+      const H = [30,55,80,62,40,90,70,35,58,96,74,44,28,66,88,52,38,78,92,60,34,50,84,68,42,26,64,86,56,36,72,94,48,30,62,80,54,40];
+      const bars = document.getElementById("bars");
+      H.forEach(h => { const s = document.createElement("span"); s.style.height = h + "%"; bars.appendChild(s); });
+      // split transcript text into per-character spans for the type-on
+      document.querySelectorAll("#panel .tx").forEach(tx => {
+        const strike = tx.querySelector(".strike");
+        const text = tx.firstChild.nodeValue; tx.firstChild.remove();
+        [...text].forEach(c => { const s = document.createElement("span"); s.className = "ch"; s.textContent = c; tx.insertBefore(s, strike); });
+      });
+      // hand-drawn strokes start undrawn
+      ["#ring1", "#under1"].forEach(sel => {
+        const p = document.querySelector(sel); const L = p.getTotalLength();
+        gsap.set(p, { strokeDasharray: L, strokeDashoffset: L });
+      });
+
+      const tl = gsap.timeline({ paused: true });
+      gsap.set("#a-roll", { transformOrigin: "50% 50%", borderRadius: 0 });
+
+      /* ================= Beat A: overwhelm (local 1.22 - 6.2) ================= */
+      // face shrinks into a card, dark stage shows around it
+      tl.to("#a-roll", { scale: .5, y: -80, borderRadius: 64, boxShadow: "0 30px 80px rgba(0,0,0,.6)", duration: .5, ease: "power3.inOut" }, 1.05);
+      // "想拍的東西一大堆": sticky notes spring in, staggered, each with its own tilt
+      const tilts = [-7, 5, 4, -6, -3, 6, -5, 3];
+      for (let i = 0; i < 8; i++) {
+        tl.fromTo("#n" + (i + 1), { opacity: 0, scale: .4, rotation: tilts[i] * 3 },
+          { opacity: 1, scale: 1, rotation: tilts[i], duration: .38, ease: "back.out(2.2)" }, 1.3 + i * .16);
+      }
+      // "但每次想到要剪輯就頭很痛": red alerts close in from every side
+      const from = [[-500, 0], [520, 0], [-500, 200], [0, -500], [0, 600]];
+      for (let i = 0; i < 5; i++) {
+        tl.fromTo("#t" + (i + 1), { opacity: 0, x: from[i][0], y: from[i][1] },
+          { opacity: 1, x: 0, y: 0, duration: .42, ease: "power3.out" }, 2.8 + i * .3);
+      }
+      // 頭很痛: circle draws on the caption word + the whole pile shakes once
+      tl.to("#ring1", { strokeDashoffset: 0, duration: .45, ease: "power2.out" }, 4.3);
+      tl.to("#overwhelm", { x: 14, duration: .05, repeat: 7, yoyo: true, ease: "none" }, 4.35);
+      tl.set("#overwhelm", { x: 0 }, 4.75);
+      // "甚至不想面對": the whole pile drops away, face card snaps back to full screen
+      const all = ["#n1","#n2","#n3","#n4","#n5","#n6","#n7","#n8","#t1","#t2","#t3","#t4","#t5"];
+      all.forEach((sel, i) => {
+        tl.to(sel, { y: 1500, rotation: (i % 2 ? 40 : -40), duration: .7, ease: "power2.in" }, 5.3 + (i % 5) * .06);
+      });
+      tl.to("#a-roll", { scale: 1, y: 0, borderRadius: 0, boxShadow: "0 0 0 rgba(0,0,0,0)", duration: .45, ease: "power3.inOut" }, 5.75);
+
+      /* ================= caption emphasis ================= */
+      // 兩個小時: underline draws + word pops
+      tl.to("#under1", { strokeDashoffset: 0, duration: .45, ease: "power1.inOut" }, 8.45);
+      tl.fromTo("#kw2h", { scale: 1 }, { scale: 1.12, duration: .14, ease: "back.out(3)", yoyo: true, repeat: 1 }, 8.45);
+      // 剩下的丟給 AI: the whole caption box flips to yellow
+      tl.fromTo("#flip1", { backgroundColor: "rgba(0,0,0,0.72)", color: "#ffffff", scale: 1 },
+        { backgroundColor: "#FFD400", color: "#111111", scale: 1.12, duration: .16, ease: "back.out(2.5)" }, 11.5);
+      tl.to("#flip1", { scale: 1, duration: .3, ease: "power2.out" }, 11.66);
+
+      /* ================= Beat C: explain (local 13.6 - 22.9) ================= */
+      // face shrinks to a top-left picture-in-picture, light stage behind
+      tl.to("#a-roll", { scale: .26, x: -340, y: -480, borderRadius: 160, boxShadow: "0 18px 40px rgba(80,50,20,.35)", duration: .5, ease: "power3.inOut" }, 13.6);
+      tl.fromTo("#ex-head", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: .4, ease: "power3.out" }, 13.95);
+      tl.fromTo("#wave",    { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: .4, ease: "power3.out" }, 14.05);
+      tl.fromTo("#panel",   { opacity: 0, y: 60, scale: .96 }, { opacity: 1, y: 0, scale: 1, duration: .45, ease: "back.out(1.6)" }, 14.1);
+
+      // status pill swaps (one visible at a time) + spinners
+      const st = [["#st1", 14.0, 16.05], ["#st2", 16.05, 18.6], ["#st3", 18.6, 21.3], ["#st4", 21.3, 23.0]];
+      st.forEach(([sel, a, b]) => {
+        tl.fromTo(sel, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: .2, ease: "power2.out" }, a);
+        if (b < 23) tl.to(sel, { opacity: 0, y: -16, duration: .15, ease: "power2.in" }, b - .15);
+      });
+      tl.fromTo("#st1 .spin", { rotation: 0 }, { rotation: 720, duration: 2.05, ease: "none" }, 14.0);
+      tl.fromTo("#st2 .spin", { rotation: 0 }, { rotation: 900, duration: 2.55, ease: "none" }, 16.05);
+      tl.fromTo("#st3 .spin", { rotation: 0 }, { rotation: 900, duration: 2.7,  ease: "none" }, 18.6);
+      tl.fromTo("#st4", { scale: .8 }, { scale: 1, duration: .35, ease: "back.out(3)" }, 21.3);
+
+      // "轉成文字": waveform breathes while each line types on
+      tl.fromTo("#bars span", { scaleY: .3 }, { scaleY: 1, duration: .22, ease: "sine.inOut", yoyo: true, repeat: 7, stagger: { each: .03, from: "start" } }, 14.1);
+      const rows = ["#r1","#r2","#r3","#r4","#r5","#r6"];
+      rows.forEach((r, i) => {
+        tl.to(r + " .ch", { opacity: 1, duration: .01, stagger: .035 }, 14.35 + i * .27);
+      });
+
+      // "每一秒都標出節點": timestamp chips pop in, ticks drop on the waveform in sync
+      rows.forEach((r, i) => {
+        tl.fromTo(r + " .ts", { opacity: 0, scale: .5 }, { opacity: 1, scale: 1, duration: .28, ease: "back.out(2.6)" }, 16.2 + i * .28);
+        tl.fromTo("#k" + (i + 1), { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: .25, ease: "power2.out" }, 16.2 + i * .28);
+      });
+
+      // "自己去工作": NG lines flash red and get struck through
+      ["#r2", "#r4"].forEach((r, i) => {
+        tl.to(r, { backgroundColor: "rgba(255,59,48,.12)", duration: .2 }, 18.75 + i * .45);
+        tl.to(r + " .strike", { scaleX: 1, duration: .35, ease: "power2.out" }, 18.8 + i * .45);
+      });
+
+      // "整段都剪順": NG lines collapse, the rest slide up, check marks pop in
+      tl.to(["#r2", "#r4"], { scaleY: 0, opacity: 0, duration: .3, ease: "power2.in" }, 20.3);
+      tl.to("#r3", { y: -90,  duration: .45, ease: "power3.inOut" }, 20.45);
+      tl.to(["#r5", "#r6"], { y: -180, duration: .45, ease: "power3.inOut" }, 20.45);
+      ["#r1", "#r3", "#r5", "#r6"].forEach((r, i) => {
+        tl.fromTo(r + " .ok", { opacity: 0, scale: .3 }, { opacity: 1, scale: 1, duration: .3, ease: "back.out(3)" }, 20.95 + i * .14);
+      });
+
+      // "剪成你現在所看到的完成品": the PiP grows back to full screen over the panel
+      tl.to("#a-roll", { scale: 1, x: 0, y: 0, borderRadius: 0, boxShadow: "0 0 0 rgba(0,0,0,0)", duration: .55, ease: "power3.inOut" }, 22.2);
+      tl.to(["#ex-head", "#wave", "#panel"], { opacity: 0, duration: .3 }, 22.0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
