@@ -368,7 +368,7 @@ GSAP 疊層,跟字幕同一個 composition。**提案裡用到特效工具箱的
 1. b-roll 的 `<video>` 要**自己當一個 clip**(直接掛 `data-start`/`data-duration`/`class="clip"`),**不要包在另一個有 `data-start` 的 `<div>` 裡** — 巢狀 render 會把它凍住。樣式(圓角、陰影、full/角落)直接寫在 `<video>` 上。
 2. 每個 `<video>` 要有**唯一 id**,不然 render 找不到會凍住。
 3. `data-track-index` 是**時間軌不是圖層**:host 跟它的媒體如果時間重疊,就不能同一個 track;前後圖層用 CSS `z-index` 控。想切片段用 `data-media-start` 挑素材的起點。
-4. **相鄰兩段 b-roll 中間別留碎縫。** b-roll 照字幕句起訖排,而句跟句之間本來就有換氣空隙 → 兩段 b-roll 中間露出 0.1–0.3 秒的 a-roll,人臉「閃一下」(實測學員三處全自己抓到)。render 前把所有 b-roll 的 `data-start` / `data-start + data-duration` 按時間排好列一次,**任何小於 0.6 秒的 a-roll 空隙,把前一段 b-roll 延長補滿**。
+4. **相鄰兩段 b-roll 中間別留碎縫。** b-roll 照字幕句起訖排,而句跟句之間本來就有換氣空隙 → 兩段 b-roll 中間露出 0.1–0.3 秒的 a-roll,人臉「閃一下」(實測學員三處全自己抓到)。**render 前一定跑 `"$PY" "$H/check_broll_gaps.py" <composition 資料夾>`**:它列出所有小於 0.6 秒的 a-roll 空隙,跟前一段 b-roll 的 `data-duration` 要改成多少剛好補滿(exit 1 = 有碎縫)。延長前確認那段素材夠長,不夠就讓下一段提早開始。動態 b-roll(`<div>` 動畫)它掃不到,自己對時間。
 
 改完照樣 `npx hyperframes lint` → 修 error → render。
 
