@@ -240,8 +240,14 @@ def extract_segment(
     fps: str = "30",
     preview: bool = False,
     draft: bool = False,
+    n_frames: int | None = None,
 ) -> None:
-    """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+    """Extract a cut range as its own MOV (H.264 + PCM) with grade + 30ms audio fades baked in.
+
+    音訊用 PCM、而且長度硬對齊到這段的影格數(學員回報 2026-08-31 / 09-12):
+    以前每段各自壓 AAC 再串,每個接點都多一截 AAC priming、影像又按影格取整,
+    段數一多音訊就累積漂移(41 段差 1 秒),句尾最後一個字被切掉、後段聲音衰減。
+    現在每段的影像是整數格 N、音訊剛好 N/fps 秒,串起來零累積;AAC 只在串完壓一次。
 
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
@@ -267,9 +273,17 @@ def extract_segment(
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
 
+    # 影像取整數格,音訊長度對齊到同一個長度(見 docstring)
+    fps_f = _fps_to_float(fps)
+    if n_frames is None:
+        n_frames = max(1, round(duration * fps_f))
+    seg_dur = n_frames / fps_f
+    n_samples = round(seg_dur * 48000)
+
     # 30ms audio fades at both edges (Rule 3) — prevent pops
-    fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    fade_out_start = max(0.0, seg_dur - 0.03)
+    af = (f"aresample=48000,afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03,"
+          f"apad,atrim=end_sample={n_samples}")
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -281,14 +295,13 @@ def extract_segment(
     cmd = [
         "ffmpeg", "-y",
         "-ss", f"{seg_start:.3f}",
+        "-t", f"{seg_dur + 0.5:.3f}",  # 只讀需要的那段;精確長度由 frames/atrim 決定
         "-i", str(source),
-        "-t", f"{duration:.3f}",
         "-vf", vf,
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
-        "-pix_fmt", "yuv420p", "-r", fps,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p", "-r", fps, "-frames:v", str(n_frames),
+        "-c:a", "pcm_s16le",
         str(out_path),
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -320,6 +333,10 @@ def extract_all_segments(
     used = {r["source"] for r in ranges}
     fps = output_fps_for_sources([resolve_path(sources[n], edit_dir) for n in used])
 
+    # 每段的格數用「累積時間」取整,不是各段自己取整 — 各段自己取整的誤差會一路
+    # 累加(40 段可以偏 0.13 秒),字幕跟 EDL 算出來的總長就對不上成品了。
+    fps_f = _fps_to_float(fps)
+    cum = 0.0
     seg_paths: list[Path] = []
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  (fps: {fps})")
     if is_auto:
@@ -330,7 +347,7 @@ def extract_all_segments(
         start = float(r["start"])
         end = float(r["end"])
         duration = end - start
-        out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
+        out_path = clips_dir / f"seg_{i:02d}_{src_name}.mov"
 
         if is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
@@ -341,7 +358,10 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, fps=fps, preview=preview, draft=draft)
+        n_frames = max(1, round((cum + duration) * fps_f) - round(cum * fps_f))
+        cum += duration
+        extract_segment(src_path, start, duration, seg_filter, out_path, fps=fps,
+                        preview=preview, draft=draft, n_frames=n_frames)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -351,7 +371,8 @@ def extract_all_segments(
 
 
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
+    """Concat via the concat demuxer: video stream-copied (lossless), PCM audio
+    encoded to AAC once here — never concat per-segment AAC (priming drift)."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
     concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")
@@ -360,7 +381,8 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_list),
-        "-c", "copy",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -523,18 +545,23 @@ def decoded_audio_duration(path: Path) -> float | None:
     """Actually decode the audio and return its real duration in seconds.
 
     Container metadata can lie (ffmpeg 8.1 loudnorm bug produced files whose
-    container said 59s but decoded to 56s), so this decodes to null and reads
-    the final progress timestamp.
+    container said 59s but decoded to 56s). `-f null` 的 time= 也會騙人:它照
+    時間戳報,不是照實際樣本數 — 學員回報(2026-09-12)一支檔案 time= 說 162.99s、
+    真的寫成 PCM 是 163.97s。所以這裡實際解碼成 PCM、數樣本數。
     """
-    proc = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-i", str(path), "-vn", "-f", "null", "-"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    proc = subprocess.Popen(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
+         "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
-    matches = re.findall(r"time=(\d+):(\d+):(\d+\.?\d*)", proc.stderr)
-    if not matches:
+    n_bytes = 0
+    assert proc.stdout is not None
+    while chunk := proc.stdout.read(1 << 20):
+        n_bytes += len(chunk)
+    proc.wait()
+    if proc.returncode != 0 or n_bytes == 0:
         return None
-    h, m, s = matches[-1]
-    return int(h) * 3600 + int(m) * 60 + float(s)
+    return n_bytes / 2 / 8000
 
 
 def video_duration(path: Path) -> float | None:
