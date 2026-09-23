@@ -56,6 +56,17 @@ import requests
 # 關掉走一般 HTTP 就正常。要搶在任何 huggingface/whisper 相關 import 之前設好。
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
+# 有顯卡但沒裝 CUDA/cuDNN 的 Windows(學員機器幾乎都是),faster-whisper 走 GPU 會在
+# 原生層直接把整個 process 砍掉(0xC0000409),try/except 接不到、CPU 退路永遠不會跑
+# (學員回報 2026-08-29 / 09-06)。CPU 跑 90 秒影片約 1 分鐘,夠快 — 預設一律 CPU,
+# 真的有裝 CUDA 的人自己設 FREECUT_WHISPER_DEVICE=cuda 開回來。
+# 只針對 pip 版 faster-whisper;XXL 獨立版自帶 CUDA 函式庫,呼叫它時會把 GPU 還給它。
+_GPU_HIDDEN = False
+if (os.environ.get("FREECUT_WHISPER_DEVICE", "cpu").lower() == "cpu"
+        and "CUDA_VISIBLE_DEVICES" not in os.environ):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    _GPU_HIDDEN = True
+
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 DEFAULT_BACKEND = "whisper"
@@ -173,6 +184,38 @@ def _faster_whisper_available() -> bool:
         return False
 
 
+MLX_REPOS = {
+    "tiny": "mlx-community/whisper-tiny-mlx",
+    "base": "mlx-community/whisper-base-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "large": "mlx-community/whisper-large-v3-mlx",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+}
+
+
+def _hf_offline_if_cached(model: str) -> None:
+    """模型已經在本機快取,就叫 huggingface 不要連網。
+
+    不設的話,mlx-whisper / faster-whisper 每次載模型都會先連 HF 查有沒有新版;
+    學員網路連不到(例如 IPv6 SYN_SENT)時會整整卡 10 分鐘、CPU 0%,看起來像當機
+    (學員回報 2026-09-01,設 HF_HUB_OFFLINE=1 後 3 秒轉完)。
+    一定要在 import mlx_whisper / faster_whisper 之前呼叫 — huggingface_hub 只在
+    import 當下讀這個環境變數。快取不存在就不動,第一次下載照常連網。
+    """
+    if "HF_HUB_OFFLINE" in os.environ:
+        return
+    repos = [model] if "/" in model else [MLX_REPOS.get(model, ""), f"Systran/faster-whisper-{model}"]
+    hub = Path(os.environ.get("HF_HUB_CACHE")
+               or Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub")
+    for repo in filter(None, repos):
+        snaps = hub / ("models--" + repo.replace("/", "--")) / "snapshots"
+        if snaps.is_dir() and any(f.is_file() for f in snaps.rglob("*")):
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            return
+
+
 def transcribe_whisper(
     audio_path: Path,
     model: str = DEFAULT_WHISPER_MODEL,
@@ -184,20 +227,12 @@ def transcribe_whisper(
     Returns the normalized {"words": [...]} shape with speaker_id="speaker_0".
     """
     word_entries: list[dict] = []
+    _hf_offline_if_cached(model)
 
     if _mlx_whisper_available():
         import mlx_whisper
         # mlx-whisper uses HuggingFace repo IDs. Map common short names.
-        repo_map = {
-            "tiny": "mlx-community/whisper-tiny-mlx",
-            "base": "mlx-community/whisper-base-mlx",
-            "small": "mlx-community/whisper-small-mlx",
-            "medium": "mlx-community/whisper-medium-mlx",
-            "large": "mlx-community/whisper-large-v3-mlx",
-            "large-v3": "mlx-community/whisper-large-v3-mlx",
-            "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
-        }
-        path_or_repo = repo_map.get(model, model)
+        path_or_repo = MLX_REPOS.get(model, model)
         result = mlx_whisper.transcribe(
             str(audio_path),
             path_or_hf_repo=path_or_repo,
@@ -222,7 +257,9 @@ def transcribe_whisper(
 
         # device="auto" 只看「有沒有 GPU」,不看 CUDA 執行階段有沒有裝 — 學員機器
         # 不會裝 CUDA Toolkit,所以有顯卡的 Windows 一律炸 cublas64 載入錯誤,
-        # 不會自己退回 CPU(學員實測)。而且 wm.transcribe() 是 lazy 的,錯誤要到
+        # 不會自己退回 CPU(學員實測)。缺 cuDNN 更糟,是原生層直接死、except 接不到,
+        # 所以檔案開頭預設把 GPU 藏起來(CUDA_VISIBLE_DEVICES=-1),"auto" 就會選 CPU;
+        # 這段 try/except 只剩給自己開了 GPU 的人。而且 wm.transcribe() 是 lazy 的,錯誤要到
         # 迭代 segments 才浮出來,所以整段迭代都要包住;結果先收進區域 list,
         # 成功才 extend,失敗那次的半截結果不會混進來。
         def _run_faster_whisper(device: str, compute_type: str) -> list[dict]:
@@ -367,7 +404,10 @@ def transcribe_whisper_xxl(
             "--output_format", "json",
             "--output_dir", str(out_dir),
         ]
-        subprocess.run(cmd, check=True)
+        env = dict(os.environ)
+        if _GPU_HIDDEN:
+            env.pop("CUDA_VISIBLE_DEVICES", None)
+        subprocess.run(cmd, check=True, env=env)
 
         jsons = list(out_dir.glob("*.json"))
         if not jsons:
@@ -626,6 +666,16 @@ def transcribe_one(
             api_key=api_key,
         )
 
+    # 0 個字 = 引擎靜默失敗(學員回報 2026-09-06:exit 0、transcripts/ 卻是空的)。
+    # 不寫檔,不然快取會把空逐字稿當成功,之後每次都「cached」跳過。
+    if isinstance(payload, dict) and "words" in payload and not any(
+        w.get("type") == "word" for w in payload["words"]
+    ):
+        raise RuntimeError(
+            f"{video.name} 轉出來 0 個字 — 逐字稿引擎沒有正常跑完(不是這支影片沒講話的話,"
+            f"把上面的錯誤訊息整段回報)。沒有寫出逐字稿檔。"
+        )
+
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     # Always drop a compact companion the reading agent should use instead of
     # the fat JSON (see write_compact). Cheap to produce, big token saver.
@@ -693,16 +743,19 @@ def main() -> None:
 
     edit_dir = (args.edit_dir or (video.parent / "edit")).resolve()
 
-    transcribe_one(
-        video=video,
-        edit_dir=edit_dir,
-        api_key=None,
-        language=args.language,
-        num_speakers=args.num_speakers,
-        backend=args.backend,
-        whisper_model=args.model,
-        vibevoice_url=args.vibevoice_url,
-    )
+    try:
+        transcribe_one(
+            video=video,
+            edit_dir=edit_dir,
+            api_key=None,
+            language=args.language,
+            num_speakers=args.num_speakers,
+            backend=args.backend,
+            whisper_model=args.model,
+            vibevoice_url=args.vibevoice_url,
+        )
+    except RuntimeError as e:
+        sys.exit(f"錯誤:{e}")
 
 
 if __name__ == "__main__":
