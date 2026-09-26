@@ -187,7 +187,7 @@ fi
 # 純粹是每台機器的顯示設定，不影響 git 追蹤或任何腳本行為，隨時可以在 Finder 用
 # Cmd+Shift+. 切換顯示；重跑這段也不會出錯（已經隱藏的檔案再隱藏一次沒有副作用）。
 # README.md 刻意留在外面不藏 — 學員照 README 走到一半跑完 setup,回頭想再看就找不到了(實測回報)。
-HIDE_LIST=("LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools" "CLAUDE.md")
+HIDE_LIST=("LICENSE" ".gitignore" "setup.sh" "setup.ps1" "scripts" "tools" "CLAUDE.md" "AGENTS.md")
 if [ "$UNAME" = "Darwin" ]; then
   for f in "${HIDE_LIST[@]}"; do
     [ -e "$KIT/$f" ] && chflags hidden "$KIT/$f" 2>/dev/null
@@ -230,7 +230,7 @@ NOTE="$KIT/安裝完成說明.md"
   echo "## 資料夾裡少了幾個檔案是正常的"
   echo ""
   echo "setup 會把工具包內部運作用的檔案（\`tools/\`、\`scripts/\`、\`setup.sh\`、"
-  echo "\`setup.ps1\`、\`CLAUDE.md\`、\`LICENSE\`）在 Finder／檔案總管裡隱藏起來，"
+  echo "\`setup.ps1\`、\`CLAUDE.md\`、\`AGENTS.md\`、\`LICENSE\`）在 Finder／檔案總管裡隱藏起來，"
   echo "讓你打開這個資料夾只看到會用到的東西。**功能完全不受影響**，只是不顯示而已。"
   echo ""
   echo "想看回來："

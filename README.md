@@ -32,7 +32,7 @@ ai-video-editor/
 
 其他像 `tools/`、`setup.sh`、`README.md` 是工具包內部運作用的，平常不用點開，交給 AI 處理就好。
 
-**裝完你會發現資料夾裡少了幾個東西，這是正常的。** `setup` 跑完會把 `tools/`、`scripts/`、`setup.sh`、`setup.ps1`、`CLAUDE.md`、`LICENSE` 這些內部檔案在 Finder／檔案總管裡**隱藏**起來，讓你打開只看到上面那五個會用到的。**功能完全不受影響**，只是不顯示而已。想看回來：Mac 按 `Cmd + Shift + .`（句點）；Windows 在檔案總管「檢視」→「顯示」→ 勾「隱藏的項目」。（`setup` 也會在資料夾裡留一份 `安裝完成說明.md`，同樣寫著這件事。）
+**裝完你會發現資料夾裡少了幾個東西，這是正常的。** `setup` 跑完會把 `tools/`、`scripts/`、`setup.sh`、`setup.ps1`、`CLAUDE.md`、`AGENTS.md`、`LICENSE` 這些內部檔案在 Finder／檔案總管裡**隱藏**起來，讓你打開只看到上面那五個會用到的。**功能完全不受影響**，只是不顯示而已。想看回來：Mac 按 `Cmd + Shift + .`（句點）；Windows 在檔案總管「檢視」→「顯示」→ 勾「隱藏的項目」。（`setup` 也會在資料夾裡留一份 `安裝完成說明.md`，同樣寫著這件事。）
 
 ### 關於使用紀錄
 

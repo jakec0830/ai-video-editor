@@ -183,7 +183,7 @@ if ((-not (Test-Path $pref)) -and (Test-Path $prefTpl)) {
 # 使用者打開資料夾只會看到 審片.html、我的影片、素材庫、我的剪輯偏好.md、錯誤回報。
 # 想看隱藏檔:檔案總管 → 檢視 → 顯示 → 隱藏的項目。可重複執行。
 # README.md 刻意留在外面不藏 — 學員照 README 走到一半跑完 setup,回頭想再看就找不到了。
-foreach ($f in @("LICENSE",".gitignore","setup.sh","setup.ps1","scripts","tools","CLAUDE.md")) {
+foreach ($f in @("LICENSE",".gitignore","setup.sh","setup.ps1","scripts","tools","CLAUDE.md","AGENTS.md")) {
   $p = Join-Path $KIT $f
   if (Test-Path $p) {
     try { (Get-Item $p -Force).Attributes = (Get-Item $p -Force).Attributes -bor [IO.FileAttributes]::Hidden } catch {}
@@ -212,7 +212,7 @@ $note = Join-Path $KIT "安裝完成說明.md"
 ## 資料夾裡少了幾個檔案是正常的
 
 setup 會把工具包內部運作用的檔案（``tools\``、``scripts\``、``setup.sh``、
-``setup.ps1``、``CLAUDE.md``、``LICENSE``）在檔案總管裡隱藏起來，
+``setup.ps1``、``CLAUDE.md``、``AGENTS.md``、``LICENSE``）在檔案總管裡隱藏起來，
 讓你打開這個資料夾只看到會用到的東西。**功能完全不受影響**，只是不顯示而已。
 
 想看回來：
