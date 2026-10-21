@@ -66,6 +66,14 @@ SFX = {
     "glitch":         ("2-介面科技/glitch.mp3",     0.41, 0.49),
     "deep-woosh":     ("3-轉場/deep-woosh.mp3",     0.32, 0.51),
     "paper-slide":    ("3-轉場/paper-slide.mp3",    0.85, 0.27),
+    # film-burn.mp3 原檔是 30 秒一串連發,剪第一下(1.75–2.6s)成 film-burn-短.mp3;I 約 -28.2(循環量),峰值 0.39s
+    "film-burn":      ("3-轉場/film-burn-短.mp3",    1.29, 0.39),
+    # 2026-10-21 Jake 從 Pixabay 下載、工具包剪短的(來源見 來源與授權.md);音量是公式起點,Jake 耳朵挑過再改
+    "shutter-real":   ("3-轉場/shutter-real.mp3",   0.67, 0.127),
+    "swipe":          ("3-轉場/swipe.mp3",          0.27, 0.158),
+    "zoom-whoosh":    ("3-轉場/zoom-whoosh.mp3",    0.56, 0.278),
+    "page-turn":      ("3-轉場/page-turn.mp3",      0.38, 0.115),
+    "whoosh-soft":    ("3-轉場/whoosh-soft.mp3",    0.54, 0.116),
 }
 # 長尾巴的檔只用前幾秒(sfx_cues mix 會在結尾淡出)。deep-woosh 整檔 3.25 秒,配 0.4 秒的 blur-ripple 會拖一大段
 SFX_TRIM = {"deep-woosh": 1.0}
@@ -192,17 +200,101 @@ def r_blinds(A, B, T, D, u):
     return html, js
 
 
+def r_zoom(A, B, T, D, u):
+    """縮放轉場(2026-10-20 Jake 要的,短影音最常見):舊畫面往前衝進模糊,一半時換成新畫面從模糊裡收回來。
+    兩個畫面不會同時出現,同一個講者換段落也能用。"""
+    h = 0.5 * D
+    return "", [
+        f'tl.set("{B}", {{ opacity: 0, x: 0, zIndex: 2 }}, {_n(T)}); tl.set("{A}", {{ zIndex: 1 }}, {_n(T)});',
+        f'tl.fromTo("{A}", {{ scale: 1, filter: "blur(0px) brightness(1)" }}, {{ scale: 1.55, filter: "blur(26px) brightness(1.25)", duration: {_n(h)}, ease: "power2.in", immediateRender: false }}, {_n(T)});',
+        f'tl.set("{A}", {{ opacity: 0 }}, {_n(T + h)}); tl.set("{B}", {{ opacity: 1 }}, {_n(T + h)});',
+        f'tl.fromTo("{B}", {{ scale: 1.45, filter: "blur(26px) brightness(1.25)" }}, {{ scale: 1, filter: "blur(0px) brightness(1)", duration: {_n(D - h)}, ease: "power2.out", immediateRender: false }}, {_n(T + h)});',
+        f'tl.set("{B}", {{ filter: "none" }}, {_n(T + D)});',
+    ]
+
+
+def r_wipe(A, B, T, D, u):
+    """擦除轉場(2026-10-20):一道黑色的邊從左擦到右(Jake:黃色太突兀,改黑),邊後面就是新畫面。擦的那 0.2 秒兩個畫面各佔一邊,
+    同一個講者換段落會短暫看到兩個人 → 適合進出 b-roll / 字卡(b c)。"""
+    bar = 70
+    html = _timed_div(f"{u}-wp", T, D, f"position:absolute; top:0; left:-{bar}px; width:{bar}px; height:{H}px; z-index:6; "
+                      f"background:linear-gradient(90deg, rgba(20,22,28,0), rgba(20,22,28,.85) 40%, {DARK} 70%, rgba(20,22,28,.6));", 70)
+    return html, [
+        f'tl.set("{A}", {{ zIndex: 1 }}, {_n(T)});',
+        f'tl.set("{B}", {{ zIndex: 2, x: 0, clipPath: "inset(0px {W}px 0px 0px)" }}, {_n(T)});',
+        f'tl.to("{B}", {{ clipPath: "inset(0px 0px 0px 0px)", duration: {_n(D)}, ease: "power3.inOut" }}, {_n(T)});',
+        f'tl.fromTo("#{u}-wp", {{ x: 0 }}, {{ x: {W + bar}, duration: {_n(D)}, ease: "power3.inOut", immediateRender: false }}, {_n(T)});',
+        f'tl.set("{B}", {{ clipPath: "none" }}, {_n(T + D)});',
+    ]
+
+
+LEAK_ASSET = "素材庫/預設包/轉場素材/漏光-1.mp4"   # Jake 2026-10-21 下載的真漏光(1 秒橫式),轉直式、從 0.3s 起、2 倍速,0.37 秒
+LEAK_PEAK = 0.1                                     # 素材裡第一下爆亮的秒數(逐格量亮度 114→210),切換放這格
+LIVE_A = {"leak", "lens-blur"}
+# AI 主動提案的配方(Jake 2026-10-21 看完 13 種總覽:2 4 6 8 9 10 11 12 都行)。其他 4 個收起來(程式留著,舊專案還在用),他點名才用
+PROPOSE = {"lens-blur":    "一般換段落、換話題(最安靜,預設用它)",
+           "leak":         "情緒轉折、換鏡頭、要能量的地方(真漏光素材)",
+           "whip":         "節奏快的換段落(甩鏡帶動態模糊)",
+           "glitch":       "科技、出錯、反轉、搞笑的那一下(很短)",
+           "color-blocks": "進全螢幕字卡、換大段落(色塊整個蓋住)",
+           "wipe":         "進出字卡、切到 b-roll(黑邊)",
+           "push-slide":   "進 b-roll / 字卡(回來用 iris-circle)",
+           "iris-circle":  "從 b-roll / 字卡回到口播",
+           "card-flip":    "進出全螢幕字卡(翻一張卡)"}                                   # 這些配方的出場畫面照常播放,不做「近乎定格」
+
+
+def r_leak(A, B, T, D, u):
+    """漏光轉場(2026-10-21):用「真的」漏光影片疊上去(濾色混合,黑底自動消失),在第一下爆亮那格切換,
+    切完 0.12 秒開始把光收掉。v1/v2 用程式畫漸層,Jake:「不夠俐落、太 AI」→ 改用拍出來的素材。
+    整個畫面被光蓋住才切,同一個講者換鏡頭、換段落都能用。"""
+    import shutil
+    src = Path(sfx_cues.KIT) / LEAK_ASSET
+    dst = Path(BASE_DIR) / "tx-leak-1.mp4"
+    if not dst.exists():
+        shutil.copyfile(src, dst)
+    pk = LEAK_PEAK
+    html = (f'<video id="{u}-lv" class="clip tx-fill" src="tx-leak-1.mp4" muted playsinline data-start="{_n(T)}" '
+            f'data-duration="{_n(D)}" data-media-start="0" data-track-index="70" '
+            f'style="z-index:6; mix-blend-mode:screen;"></video>')
+    return html, [
+        f'tl.set("{B}", {{ opacity: 0, x: 0, zIndex: 2 }}, {_n(T)}); tl.set("{A}", {{ zIndex: 1 }}, {_n(T)});',
+        f'tl.set("#{u}-lv", {{ opacity: 1 }}, {_n(T)});',
+        f'tl.set("{A}", {{ opacity: 0 }}, {_n(T + pk)}); tl.set("{B}", {{ opacity: 1 }}, {_n(T + pk)});',
+        f'tl.to("#{u}-lv", {{ opacity: 0, duration: {_n(D - pk - 0.06)}, ease: "power2.out" }}, {_n(T + pk + 0.06)});',
+    ]
+
+
+def r_lens_blur(A, B, T, D, u):
+    """鏡頭失焦轉場(2026-10-21 Jake 要的 camera lens blur):照真的鏡頭失焦做 —— 糊掉、亮的地方微微暈開、
+    畫面跟著對焦「呼吸」(放大 3-4%,不是縮放轉場那種衝進去),最糊那格切,下一個畫面從糊對焦回來。
+    出場畫面照常播放(LIVE_A),不定格。"""
+    h = 0.5 * D
+    blur_out = "blur(22px) brightness(1.1) contrast(0.92) saturate(1.05)"
+    return "", [
+        f'tl.set("{B}", {{ opacity: 0, x: 0, zIndex: 2 }}, {_n(T)}); tl.set("{A}", {{ zIndex: 1 }}, {_n(T)});',
+        f'tl.fromTo("{A}", {{ scale: 1, filter: "blur(0px) brightness(1) contrast(1) saturate(1)" }}, {{ scale: 1.035, filter: "{blur_out}", duration: {_n(h)}, ease: "power2.in", immediateRender: false }}, {_n(T)});',
+        f'tl.set("{A}", {{ opacity: 0 }}, {_n(T + h)}); tl.set("{B}", {{ opacity: 1 }}, {_n(T + h)});',
+        f'tl.fromTo("{B}", {{ scale: 1.035, filter: "{blur_out}" }}, {{ scale: 1, filter: "blur(0px) brightness(1) contrast(1) saturate(1)", duration: {_n(D - h)}, ease: "power2.out", immediateRender: false }}, {_n(T + h)});',
+        f'tl.set("{B}", {{ filter: "none" }}, {_n(T + D)});',
+    ]
+
+
 # name: (fn, 來源 showcase, 預設 D, 適合 a/b/c, 預設音效, 畫面變化在 D 的哪裡(對音效峰值), 需要黑底)
+# 2026-10-21:shutter / card-flip / blinds / zoom / wipe 換成 Jake 下載的專用音效
 RECIPES = {
     "push-slide":   (r_push_slide,   "transitions-push(Push Slide)",            0.5,  "b c",   "woosh-1",        0.5,  False),
     "whip":         (r_whip,         "transitions-push(Push Slide + 動態模糊)", 0.35, "a b",   "woosh-2",        0.5,  True),
     "iris-circle":  (r_iris_circle,  "transitions-radial(Circle Iris)",         0.5,  "b c",   "woop",           0.3,  False),
-    "shutter":      (r_shutter,      "transitions-mechanical(Shutter)",         0.5,  "a b c", "camera-shutter", 0.45, False),
+    "shutter":      (r_shutter,      "transitions-mechanical(Shutter)",         0.5,  "a b c", "shutter-real",   0.45, False),
     "glitch":       (r_glitch,       "transitions-distortion(Glitch)",          0.2,  "a b",   "glitch",         0.0,  False),
     "blur-ripple":  (r_blur_ripple,  "transitions-distortion(Ripple)",          0.4,  "a",     "deep-woosh",     0.4,  True),
-    "card-flip":    (r_card_flip,    "transitions-3d(3D Card Flip)",            0.6,  "c",     "paper-slide",    0.5,  True),
+    "card-flip":    (r_card_flip,    "transitions-3d(3D Card Flip)",            0.6,  "c",     "page-turn",      0.5,  True),
     "color-blocks": (r_color_blocks, "transitions-cover(Staggered Blocks)",     0.6,  "a c",   "woosh-1",        0.35, False),
-    "blinds":       (r_blinds,       "transitions-cover(Horizontal Blinds)",    0.8,  "a c",   "paper-slide",    0.5,  False),
+    "blinds":       (r_blinds,       "transitions-cover(Horizontal Blinds)",    0.8,  "a c",   "page-turn",      0.5,  False),
+    "zoom":         (r_zoom,         "自製(Zoom Blur)",                         0.4,  "a b c", "zoom-whoosh",    0.5,  True),
+    "wipe":         (r_wipe,         "自製(Edge Wipe)",                         0.45, "b c",   "swipe",          0.5,  False),
+    "lens-blur":    (r_lens_blur,    "自製(Lens Defocus,照真鏡頭失焦)",        0.4,  "a b c", "whoosh-soft",    0.5,  True),
+    "leak":         (r_leak,         "真漏光素材(Jake 2026-10-21 下載)",       0.37, "a b c", "film-burn",      0.27, False),
 }
 
 # ------------------------------------------------------------------ building blocks
@@ -276,7 +368,11 @@ def _build_one(i, spec, src):
 
     # 場景 A:剪接點前的「近乎定格」副本(rate 0.1 → D 秒只吃掉 0.1*D 秒的畫面,結束在 T 前 0.05 秒)
     ms = max(0.0, T - 0.05 - 0.1 * D)
-    parts.append(f'<div id="{u}-a" class="tx-scene">{_video(f"{u}-va", src, T, D, ms, tr, 0.1)}</div>')
+    if rec in LIVE_A and into == "video":
+        # 光蓋住整個畫面才切的轉場:剪接點在轉場「中間」,前半段要看到她照常在動,不能定格(Jake 2026-10-21:「畫面停格了」)
+        parts.append(f'<div id="{u}-a" class="tx-scene">{_video(f"{u}-va", src, T, D, T, tr)}</div>')
+    else:
+        parts.append(f'<div id="{u}-a" class="tx-scene">{_video(f"{u}-va", src, T, D, ms, tr, 0.1)}</div>')
 
     if into == "video":
         parts.append(f'<div id="{u}-m" class="tx-scene">{_video(f"{u}-vm", src, T, D, T, tr + 1)}</div>')
@@ -579,7 +675,13 @@ if __name__ == "__main__":
         p = Path(sys.argv[2])
         sys.exit(check((p / "index.html" if p.is_dir() else p).read_text(encoding="utf-8")))
     if len(sys.argv) >= 2 and sys.argv[1] == "recipes":
+        print(f"== AI 主動提案的 {len(PROPOSE)} 個 ==")
+        for k, why in PROPOSE.items():
+            v = RECIPES[k]
+            print(f"{k:13s} D={v[2]:<5} 音效 {v[4]:15s} {why}")
+        print("== 收起來的(程式留著,使用者點名才用)==")
         for k, v in RECIPES.items():
-            print(f"{k:13s} D={v[2]:<5} 適合 {v[3]:6s} 音效 {v[4]:15s} 來源 {v[1]}")
+            if k not in PROPOSE:
+                print(f"{k:13s} D={v[2]:<5} 適合 {v[3]:6s} 音效 {v[4]:15s} 來源 {v[1]}")
         sys.exit(0)
     print(__doc__)

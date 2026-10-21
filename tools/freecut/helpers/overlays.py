@@ -69,7 +69,7 @@ BASE_CSS = """      /* ==== OVERLAYS 共用字型(overlays.py)==== */
 SFX = {
     "mouse-click":    ("2-介面科技/mouse-click.mp3",        1.8,  0.03),
     "notification":   ("2-介面科技/notification-sound.mp3", 1.5,  0.0),
-    "camera-shutter": ("3-轉場/camera-shutter.mp3",         0.86, 0.09),
+    "camera-shutter": ("3-轉場/shutter-real.mp3",           0.67, 0.127),   # 2026-10-21 換成 Jake 下載的真快門(舊檔太假)
     "record-scratch": ("1-迷因梗/record-scratch.mp3",       0.5,  0.06),
     "swell":          ("4-電影感/remembering-woosh.mp3",    0.6,  0.24),   # 光暈選配:很輕的回憶感
 }
