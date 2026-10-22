@@ -331,6 +331,8 @@ npx hyperframes init . --non-interactive --video ../preview_vN.mp4   # 只為了
 $PY $H/gen_captions.py ../captions.json --video ../preview_vN.mp4 \
     --w 1080 --h 1920 --duration <ffprobe量到的秒數> --font 宋體 -o index.html
 ```
+- **`init` 一定要在空的 `captions/` 跑。** 裡面已經有檔案(例如先放了 captions.json)會失敗(Directory not empty)。captions.json 放在 `工作檔/`(上一層),不要放進 `captions/`。
+- **給 creative.py 用的底稿存成 `base.tpl`,不要叫 `base.html`。** `hyperframes lint` 會把資料夾裡每個 .html 當成一個 composition,多一個就報錯(2026-10-22 實測)。
 `gen_captions` 把「工程上會出錯的部分」全部封好了(這些坑手寫必踩):影片 `data-start="0"`、字幕 `z-index` 要壓過影片不然字幕跑到影片後面看不到、每個 clip 要 `class="clip"`+`data-*`+唯一 id、`@font-face` 不寫字型會 fallback 成黑體。它留了 `CREATIVE LAYER` / `CREATIVE TIMELINE` 兩個插槽給你加特效(第 5/5.5 步)。**框架穩、內容活** — 斷句/highlight/特效都還是你量身出的。
 
 **★ 加過特效之後不要再重跑 `gen_captions`** — 它是整份重產 index.html,你寫在 CREATIVE LAYER /

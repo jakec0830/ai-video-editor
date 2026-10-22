@@ -153,6 +153,21 @@ def voice_gain(render_mp4, target: float = VOICE_LUFS) -> tuple[float, str]:
     return g, f"人聲 {i} LUFS → 補 {g:+}dB 到 {target}"
 
 
+def loop_body(bgm) -> float | None:
+    """從 素材庫/預設包/對照表.md 讀這首的「可循環主體」尾秒數(0 → 49s 的 49)。查不到回 None = 整首都能循環。
+    只循環主體:曲子自帶的淡出尾巴(近乎無聲)整檔循環會被帶進成品中段(2026-10-22 測試 25-28s 出現死區)。"""
+    table = Path(__file__).resolve().parents[3] / "素材庫" / "預設包" / "對照表.md"
+    if not table.exists():
+        return None
+    name = Path(bgm).name
+    for line in table.read_text(encoding="utf-8").splitlines():
+        if name in line:
+            m = re.search(r"0\s*→\s*([\d.]+)\s*s", line)
+            if m:
+                return float(m.group(1))
+    return None
+
+
 def mix_args(render_mp4, cues: list[dict], out_mp4, bgm=None, bgm_vol: float = 0.2, duration: float | None = None,
              duck_db: float = DUCK_DB, voice_db: float = 0.0) -> list[str]:
     """回傳 ffmpeg 參數 list(跨平台直接丟 subprocess,不經過 shell 引號)。voice_db = 人聲先補幾 dB(見 voice_gain)。"""
@@ -170,8 +185,23 @@ def mix_args(render_mp4, cues: list[dict], out_mp4, bgm=None, bgm_vol: float = 0
     if bgm:
         k = len(cues) + 1
         dur = duration or _duration(render_mp4)
-        args += ["-stream_loop", "-1", "-i", str(bgm)]
-        fl.append(f"[{k}:a]aformat=channel_layouts=stereo:sample_rates=48000,atrim=0:{dur:.3f},"
+        body, xf = loop_body(bgm), 1.0
+        if body and body > xf + 2 and dur > body:
+            # 主體接主體,接縫用 1 秒交叉淡化;不用 -stream_loop(會把淡出的死區循環進來)
+            n = int((dur - xf) // (body - xf)) + 2
+            for j in range(n):
+                args += ["-i", str(bgm)]
+                fl.append(f"[{k + j}:a]aformat=channel_layouts=stereo:sample_rates=48000,"
+                          f"atrim=0:{body:.3f},asetpts=PTS-STARTPTS[b{j}]")
+            prev = "b0"
+            for j in range(1, n):
+                fl.append(f"[{prev}][b{j}]acrossfade=d={xf}:c1=tri:c2=tri[x{j}]")
+                prev = f"x{j}"
+            src = f"[{prev}]"
+        else:
+            args += ["-stream_loop", "-1", "-i", str(bgm)]
+            src = f"[{k}:a]aformat=channel_layouts=stereo:sample_rates=48000,"   # 對照表查不到主體秒數:整首循環
+        fl.append(f"{src}atrim=0:{dur:.3f},"
                   f"afade=t=in:st=0:d=0.9,afade=t=out:st={max(0.0, dur - 1.4):.2f}:d=1.4,"
                   f"volume='{_duck_expr(cues, bgm_vol, duck_db)}':eval=frame[bgm]")
         labels.append("[bgm]")
