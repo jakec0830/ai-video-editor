@@ -334,7 +334,8 @@ $PY $H/edl_to_captions.py <transcript.json> <edl.json> -o captions.json --fixes 
 ```bash
 mkdir -p <專案>/工作檔/captions && cd 進去
 npx hyperframes init . --non-interactive --video ../preview_vN.mp4   # 只為了拿 npm 專案骨架
-$PY $H/gen_captions.py ../captions.json --video ../preview_vN.mp4 \
+cp ../preview_vN.mp4 .   # init 之後才複製進來;index.html 不能用 ../ 路徑(lint 會報 invalid_parent_traversal_in_asset_path)
+$PY $H/gen_captions.py ../captions.json --video preview_vN.mp4 \
     --w 1080 --h 1920 --duration <ffprobe量到的秒數> --font 宋體 -o index.html
 ```
 - **`init` 一定要在空的 `captions/` 跑。** 裡面已經有檔案(例如先放了 captions.json)會失敗(Directory not empty)。captions.json 放在 `工作檔/`(上一層),不要放進 `captions/`。
@@ -433,7 +434,7 @@ GSAP 疊層,跟字幕同一個 composition。**提案裡用到特效工具箱的
 
 ### 5.2 字幕第二段:兩行字幕 / 螢光筆(寫在 captions.json,gen_captions 產)
 
-兩種都是「句子先出、講到重點才動」,跟靜態塗黃同一個額度(一支 3-4 個)。**都是特效層(G)的決定**:審片 E 那輪使用者核的是字跟斷句,鎖了才加;審片頁的預覽字幕照舊一行(它不畫第二段),第二段長什麼樣用 snapshot 拼圖給他看。
+兩種都是「句子先出、講到重點才動」,跟靜態塗黃同一個額度(一支 3-4 個)。**都是特效層(G)的決定**:審片 E 那輪使用者核的是字跟斷句,鎖了才加;審片頁的預覽字幕照舊一行(它不畫第二段),第二段長什麼樣,特效層做完直接 render 放審片頁給他看。
 
 | 什麼句子 | 用什麼 | captions.json |
 |---|---|---|
@@ -474,7 +475,7 @@ GSAP 疊層,跟字幕同一個 composition。**提案裡用到特效工具箱的
 - 一支 2-3 個,放在真的換話題的地方,不是每個剪點都放。
 - **一定要讀它印出的紀錄**:`SHIFT` / `REMOVE` / `MOVE` / `FADE` 是它自動做的;`HIDDEN` = 特效被 b-roll/字卡蓋住,自己決定搬不搬;`MANUAL` 要手改。字幕(含兩行字幕、螢光筆)永遠在轉場上面、不動。
 - 音效:回傳的 `cues` 用 `sfx_cues.save("sfx_cues.json", "轉場", cues)` 存,跟兩行字幕同一份,**一樣算在整支音效額度裡**。額度不夠時 spec 加 `back_sfx=False`(回程不配)或 `sfx=False`。
-- render 前跑 `$PY $H/transitions.py check <captions 資料夾>`,不是 OK 不准 render。加完 snapshot:轉場前、正中間、轉場後各一格拼一張給他看(card-flip 正中間全黑是正常的,挑 1/3 的位置截)。
+- render 前跑 `$PY $H/transitions.py check <captions 資料夾>`,不是 OK 不准 render。加完 snapshot:轉場前、正中間、轉場後各一格拼一張自己檢查(card-flip 正中間全黑是正常的,挑 1/3 的位置截)。
 
 ### 5.4 疊加效果(IG 追蹤卡、通知、閃光、定格、漏光、攝影機 HUD)
 
@@ -483,7 +484,7 @@ GSAP 疊層,跟字幕同一個 composition。**提案裡用到特效工具箱的
 - **IG 追蹤卡(結尾 CTA)**:帳號、顯示名稱、頭像**只問一次**,記進 `我的剪輯偏好.md`「特效／品牌」的 `IG 帳號:` / `IG 顯示名稱:` / `IG 頭像:` 三行(頭像先複製進 `素材庫/圖片/`),工具自己讀。手指點擊預設 `hand-ripple`(替代款 `tap="circle"` / `"hand"` / `"none"`)。不放 Instagram 的 logo / 字樣(商標)。
 - 一定要讀它印的紀錄:`SHIFT`(落在轉場裡,整個往後搬)、`HIDDEN`(被 b-roll/字卡蓋住)、`WARN`(全畫面效果同一拍重疊、追蹤卡不在片尾)。
 - 音效:`sfx_cues.save("sfx_cues.json", "疊加卡片", cues)`,**算在整支音效額度裡**。漏光、攝影機 HUD 預設沒音效。
-- render 前一樣跑 `$PY $H/transitions.py check <captions 資料夾>`;snapshot 前 / 中 / 後各一格拼一張給他看。
+- render 前一樣跑 `$PY $H/transitions.py check <captions 資料夾>`;snapshot 前 / 中 / 後各一格拼一張自己檢查。
 
 ### 5.5 插 b-roll(選配)
 
