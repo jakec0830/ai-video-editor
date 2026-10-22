@@ -11,7 +11,8 @@ sfx_cues.py — 音效時間表(sfx_cues.json)+ 第 7 步混音。兩行字幕�
     {"at": 14.89, "sfx": "4-電影感/hit.mp3", "file": "<完整路徑>", "volume": 0.075,
      "trim": 0.6, "from": "兩行字幕", "note": "sub-8 stamp 滋生細菌"}
   at      音效從第幾秒開始放(成品時間軸)
-  trim    只用前幾秒(可省略 = 整個檔)。hit 這種有長尾巴的檔一定要剪
+  trim    只用前幾秒(可省略 = 整個檔)。hit 這種有長尾巴的檔一定要剪。剪了會自動漸弱收尾(trim 的 1/3,最多 0.4 秒)
+  fade    (可省略)自己指定漸弱秒數
   from    誰寫的:兩行字幕 / 轉場 / 手動(AI 自己加的其他音效就寫「手動」)/ 節奏音
           「節奏音」= 輕 click / 叮,用在 3-5 秒空窗需要聽覺變化的地方,不設數量(SKILL 3.5「剪輯素養」第 2 點):不壓 BGM、不算 3-6 個額度、
           不套 15 秒規則(只提醒同一個音連用兩次)。其他 from 都是「重音效」,規則照舊。
@@ -178,7 +179,9 @@ def mix_args(render_mp4, cues: list[dict], out_mp4, bgm=None, bgm_vol: float = 0
         args += ["-i", _resolve(c)]
         ms = int(round(c["at"] * 1000))
         tr = c.get("trim")
-        cut = f"atrim=0:{tr},afade=t=out:st={max(0.0, tr - 0.12):.2f}:d=0.12," if tr else ""
+        # 剪短的音效要漸弱收尾:固定 0.12 秒太硬,聽起來像突然停(2026-10-22 Jake:叮剪到 1.2 秒「有點突然停」)
+        fd = c.get("fade", round(min(0.4, tr / 3), 2)) if tr else 0
+        cut = f"atrim=0:{tr},afade=t=out:st={max(0.0, tr - fd):.2f}:d={fd}," if tr else ""
         fl.append(f"[{k}:a]aformat=channel_layouts=stereo:sample_rates=48000,{cut}"
                   f"volume={c['volume']},adelay={ms}|{ms}[s{k}]")
         labels.append(f"[s{k}]")
