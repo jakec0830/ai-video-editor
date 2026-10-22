@@ -13,7 +13,7 @@ sfx_cues.py — 音效時間表(sfx_cues.json)+ 第 7 步混音。兩行字幕�
   at      音效從第幾秒開始放(成品時間軸)
   trim    只用前幾秒(可省略 = 整個檔)。hit 這種有長尾巴的檔一定要剪
   from    誰寫的:兩行字幕 / 轉場 / 手動(AI 自己加的其他音效就寫「手動」)/ 節奏音
-          「節奏音」= 每 3 秒左右一個的輕 click / 叮(SKILL 3.5「剪輯素養」第 2 點):不壓 BGM、不算 3-6 個額度、
+          「節奏音」= 輕 click / 叮,用在 3-5 秒空窗需要聽覺變化的地方,不設數量(SKILL 3.5「剪輯素養」第 2 點):不壓 BGM、不算 3-6 個額度、
           不套 15 秒規則(只提醒同一個音連用兩次)。其他 from 都是「重音效」,規則照舊。
 
 用法:
@@ -39,7 +39,7 @@ SAME_SFX_GAP = 15.0                                     # 同一個音效 15 秒
 VOICE_LUFS = -14.0                                      # 人聲目標響度(render.py 的 loudnorm 也是 -14;對照表的音效 volume 都以這個為基準)
 DUCK_DB = 4.5                                           # 音效響的時候 BGM 往下壓幾 dB(來源建議 3-6dB;Jake 2026-10-07 同意加)
 CAP_HINT = "3-6"                                        # 重音效的每支點數(Jake 2026-10-07 定:只配在看得到的動作上);節奏音另計
-RHYTHM = "節奏音"                                        # Jake 2026-10-20:每 3 秒左右一個輕音讓節奏鮮明,跟重音效分開算
+RHYTHM = "節奏音"                                        # 輕音讓節奏鮮明,跟重音效分開算;不設數量(Jake 2026-10-22:3 秒原則是敏銳度不是配額)
 
 
 def is_rhythm(c: dict) -> bool:
@@ -118,7 +118,7 @@ def _duration(p) -> float:
 def _duck_expr(cues: list[dict], bgm_vol: float, duck_db: float) -> str:
     """BGM 的音量算式:每個音效響的那段(提早 0.05 秒、0.08 秒壓下去,結束後 0.3 秒回來)乘上 -duck_db。
     重疊的音效相乘,所以兩個疊在一起會壓更多(本來就不該疊在同一拍)。
-    節奏音不壓:每 3 秒一個,壓了 BGM 會一路忽大忽小。"""
+    節奏音不壓:數量多、間隔短,壓了 BGM 會一路忽大忽小。"""
     cues = [c for c in cues if not is_rhythm(c)]
     if duck_db <= 0 or not cues:
         return f"{bgm_vol}"
