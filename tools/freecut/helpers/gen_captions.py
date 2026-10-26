@@ -15,12 +15,15 @@ Input: a captions JSON, a list of
 字幕第二段特效(特效層 G 才加,都寫在 captions.json,重產字幕不會洗掉):
     "line2": "滋生細菌"   兩行字幕:text 的「結尾」那段變成第二行,講到才進場(第一行 = 前面那段)。
                           有 line2 的句子不再塗第一行的黃字。line2 不是 text 的結尾 → 印 ⚠、照一行出。
-    "enter": stamp|slide|drop|type|pop   第二行怎麼進場(可省略 = 自動輪替)
+    "enter": rise|stamp|slide|drop|type|pop   第二行怎麼進場(可省略 = 自動輪替)
     "line2_at": 秒        手動指定第二行進場(可省略)
     "line2_sfx": false    這句不配音效
     "kw_fx": "marker"     螢光筆:講到 hl 那個詞時,黃色螢光筆從左刷過去。沒寫 = 照舊整句靜態塗黃
     "kw_at": 秒           手動指定螢光筆時間(可省略)
     "kw_sfx": false       這句螢光筆不配提示音(預設配相機對焦「嗶」)
+    "in": cut|fade|glitch|rise|zoom|typing   整句怎麼進場(可省略:有 hl 用 fade,沒有用 cut)
+                          中文也認:切換/淡入/條紋/升上來/放大/電腦輸入。用量上限見 ENTRY_* 註解
+  重點字(hl)一律放大 1.2 倍、底部對齊(emphasis 款照舊 1.4 倍)。
   進場時間照「字的位置」算:edl_to_captions 寫的 char_times(每個字的秒數)→ 那個字的時間;
   沒有 char_times、或字改過長度對不上 → 退回比例估算(句首 + 句長 × 前面字數 / 總字數)。
   第二行的音效寫進 sfx_cues.json(跟 transitions.py 同一份),第 7 步 sfx_cues.py mix 一次混。
@@ -103,10 +106,11 @@ WORD_LAG = 0.0
 PUNCT = set("，。、！？：；「」『』（）—…,.!?:;\"' ")
 HEAVY = '"CJKHeavy","Source Han Serif TC VF","Source Han Serif TC",sans-serif'
 L2_TRACK = 30          # 第二行的時間軌(句子不重疊,一條軌就夠;避開特效層常用的 6-19、轉場的 40+)
-ENTRANCES = ["slide", "drop", "type", "pop", "stamp"]   # 沒寫 enter 時的輪替順序(最中性的 slide 先)
+ENTRANCES = ["rise", "slide", "drop", "type", "pop", "stamp"]   # 沒寫 enter 時的輪替順序(rise 先:參考 IG 講座剪輯第二行最常這樣進)
 # 進場 → (音效 預設包/音效/ 底下, volume, 比進場早/晚幾秒放, 只用前幾秒)
 # volume 是量「音效發聲那 0.5 秒」比人聲平均低 ~11dB 調的。hit 有 4 秒長尾,整檔 LUFS 換算會太大聲(對照表的 0.27 剪短用要降)。
 L2_SFX = {
+    "rise":  ("3-轉場/whoosh-soft.mp3", 0.54, -0.05, 0.4),    # 2026-10-26:從第一行底下冒上來(IG「有超過 / 9000多家店」)
     "stamp": ("4-電影感/hit.mp3", 0.075, -0.04, 0.6),
     "slide": ("3-轉場/woosh-1.mp3", 0.357, -0.05, 0.42),
     "drop":  ("3-轉場/woop.mp3", 0.26, -0.05, 0.4),
@@ -200,7 +204,7 @@ def plan_caption_fx(captions: list[dict]) -> tuple[dict, list[str]]:
 
         want = c.get("enter")
         if want and want not in L2_SFX:
-            notes.append(f"⚠ sub-{i} enter「{want}」不認得(stamp/slide/drop/type/pop),改自動")
+            notes.append(f"⚠ sub-{i} enter「{want}」不認得(rise/stamp/slide/drop/type/pop),改自動")
             want = None
         if want and not ok(want):
             why = "跟上一句同一種進場" if want == prev else "30 秒內已經有一個 stamp"
@@ -242,6 +246,117 @@ def plan_caption_fx(captions: list[dict]) -> tuple[dict, list[str]]:
     return plan, notes
 
 
+# ---- 整句進場(captions.json 的 "in")----
+# 2026-10-26:參考 IG 講座剪輯(逐格看完 130 句):超過一半直接切換,有重點字的句子淡入,
+# 少數重點句用條紋掃出/升上來/放大;講 AI、輸入的句子用電腦輸入(Jake 看樣本選「快速打出來」)。
+# 所以預設:有 hl → fade,沒有 → cut;特別的進場由 AI 照句子挑,程式只擋用太多。
+ENTRY_KINDS = ("cut", "fade", "glitch", "rise", "zoom", "typing")
+ENTRY_ALIAS = {"切換": "cut", "直接切換": "cut", "淡入": "fade", "條紋": "glitch", "條紋掃出": "glitch",
+               "升上來": "rise", "放大": "zoom", "電腦輸入": "typing"}
+ENTRY_GLITCH_MAX = 2       # 條紋一支最多 2 次(多了像壞掉)
+# 8 條就好:每條是一個帶 clip-path 的元素,hyperframes lint 警告整支 ~40 個 clip-path/blur 元素會讓前半段錄成全黑
+# (14 條 × 2 句 = 28 個就被警告)。8 條 × 上限 2 句 = 16 個。
+GLITCH_SLICES = 8
+# 每條的上下錯位(px)跟出現順序都寫死(seek 安全,不用 random)
+GLITCH_OFFS = [-34, 22, -14, 40, -26, 10, 30, -40]
+GLITCH_ORDER = [3, 6, 1, 4, 0, 7, 2, 5]
+ENTRY_TYPING_GAP = 15.0    # 電腦輸入 15 秒內最多 1 次(慢、搶戲)
+TYPING_STEP = 0.06         # 電腦輸入每個字 0.06 秒(Jake 2026-10-26:「應該要快速打出來」,0.19 太慢)
+TYPING_SFX = ("2-介面科技/keyboard-typing.mp3", 1.5)   # 對照表:很小聲要放大;只放打字那段
+
+
+def plan_entries(captions: list[dict], plan: dict) -> tuple[dict, list[str]]:
+    """每句的整句進場。回傳 ({i: {"kind", "T", "sfx"}}, notes)。cut 不放進去。"""
+    out, notes = {}, []
+    glitches, last_typing, prev = 0, None, None
+    for i, c in enumerate(captions):
+        want = c.get("in")
+        want = ENTRY_ALIAS.get(want, want) if isinstance(want, str) else None
+        if want and want not in ENTRY_KINDS:
+            notes.append(f"⚠ sub-{i} in「{c.get('in')}」不認得(cut/fade/glitch/rise/zoom/typing),改自動")
+            want = None
+        has_hl = bool(c.get("hl")) and str(c.get("hl")) in c["text"] and plan.get(i, {}).get("kind") != "line2"
+        if not want:
+            want = "fade" if has_hl else "cut"
+        T = float(c["start"])
+        if want == "typing" and plan.get(i):
+            notes.append(f"  sub-{i} 有兩行字幕/螢光筆,電腦輸入會打架,改淡入")
+            want = "fade"
+        if want == "typing" and last_typing is not None and T - last_typing < ENTRY_TYPING_GAP:
+            notes.append(f"⚠ sub-{i} 電腦輸入跟 {last_typing:.1f}s 那句太近(< 15 秒),改淡入")
+            want = "fade"
+        if want == "glitch" and glitches >= ENTRY_GLITCH_MAX:
+            notes.append(f"⚠ sub-{i} 條紋已經用了 {ENTRY_GLITCH_MAX} 次,改淡入")
+            want = "fade"
+        if want in ("glitch", "rise", "zoom", "typing") and want == prev:
+            notes.append(f"⚠ sub-{i} 跟上一句同一種特別進場({want}),改淡入")
+            want = "fade"
+        prev = want
+        if want == "cut":
+            continue
+        e = {"kind": want, "T": round(T, 3), "sfx": None}
+        if want == "glitch":
+            glitches += 1
+        if want == "typing":
+            last_typing = T
+            n = _n_units(c["text"])
+            f, vol = TYPING_SFX
+            e["sfx"] = sfx_cues.make_cue(f, T, vol, "字幕進場", note=f"sub-{i} 電腦輸入 {c['text']}",
+                                         trim=round(n * TYPING_STEP + 0.1, 2))
+        out[i] = e
+    return out, notes
+
+
+def _typing_html(text: str, hl: str | None, hl_color: str | None = None) -> str:
+    """電腦輸入:每個字一個 span(先藏起來,佔位不動,所以從固定的左邊打出來);hl 的字包在 kw 裡。"""
+    k = text.find(hl) if hl else -1
+    style = f' style="color:{html.escape(hl_color)}"' if hl_color else ""
+    parts = []
+    for j, ch in enumerate(text):
+        span = f'<span class="tyc">{"&nbsp;" if ch == " " else html.escape(ch)}</span>'
+        if k >= 0 and j == k:
+            parts.append(f'<span class="kw"{style}>')
+        parts.append(span)
+        if k >= 0 and j == k + len(hl) - 1:
+            parts.append("</span>")
+    return "".join(parts)
+
+
+def _entry_js(kind: str, i: int, T: float, n_chars: int, end: float) -> str:
+    t = f"#sub-{i} .sub-inner"
+    js = f"\n      // sub-{i} 進場 · {kind} @ {T}"
+    if kind == "fade":
+        js += f"""
+      tl.fromTo("{t}", {{ opacity:0, x:-14 }}, {{ opacity:1, x:0, duration:.15, ease:"power2.out" }}, {T});"""
+    elif kind == "glitch":
+        # 8 條直條各自從上下錯位、半透明,照打散的順序在 0.25 秒內歸位;底下的整句先藏著
+        js += f"""
+      tl.set("#gb-{i}", {{ visibility:"hidden" }}, {T});"""
+        for k in range(GLITCH_SLICES):
+            at = round(T + GLITCH_ORDER[k] * 0.022, 3)
+            js += f"""
+      tl.fromTo("#gs-{i}-{k}", {{ y:{GLITCH_OFFS[k]}, opacity:0 }}, {{ y:0, opacity:1, duration:.09, ease:"steps(3)" }}, {at});"""
+    elif kind == "rise":
+        js += f"""
+      tl.fromTo("{t}", {{ clipPath:"inset(100% -20% -20% -20%)", y:36 }}, {{ clipPath:"inset(0% -20% -20% -20%)", y:0, duration:.16, ease:"power3.out" }}, {T});"""
+    elif kind == "zoom":
+        js += f"""
+      tl.fromTo("{t}", {{ scale:.3, opacity:0, transformOrigin:"50% 100%" }}, {{ scale:1, opacity:1, duration:.2, ease:"back.out(1.5)" }}, {T});"""
+    elif kind == "typing":
+        # 每個字到時間才出現(visibility,佔位不動 → 從固定的左邊打出來);
+        # 游標 = 最新那個字右邊一條黃線;打完每半秒閃一下到句尾(有限次數,seek 安全)
+        tt = round(T + n_chars * TYPING_STEP, 3)
+        js += f"""
+      gsap.utils.toArray("{t} .tyc").forEach((el, k, all) => {{
+        const at = {T} + k * {TYPING_STEP};
+        tl.set(el, {{ visibility:"hidden", boxShadow:"none" }}, {T});
+        tl.set(el, {{ visibility:"visible", boxShadow:"6px 0 0 #FFD400" }}, at);
+        if (k < all.length - 1) tl.set(el, {{ boxShadow:"none" }}, at + {TYPING_STEP});
+        else for (let b = {tt} + .25; b < {end}; b += .5) {{ tl.set(el, {{ boxShadow:"none" }}, b); tl.set(el, {{ boxShadow:"6px 0 0 #FFD400" }}, b + .25); }}
+      }});"""
+    return js
+
+
 def _marker_html(text: str, hl: str, i: int) -> str:
     t, h = html.escape(text), html.escape(hl)
     chars = "".join(f'<span class="mkc">{html.escape(ch)}</span>' for ch in hl)
@@ -255,7 +370,10 @@ def _l2_js(kind: str, i: int, T: float, shift: int) -> str:
     js = f"""
       // sub-{i} 兩行字幕 · {kind} @ {T}(第一行往上讓位)
       tl.fromTo("#sub-{i} .sub-inner", {{ y:0 }}, {{ y:-{shift}, duration:.2, ease:"power2.out" }}, {T});"""
-    if kind == "drop":
+    if kind == "rise":
+        js += f"""
+      tl.fromTo("{t}", {{ clipPath:"inset(100% -10% -10% -10%)", y:44 }}, {{ clipPath:"inset(0% -10% -10% -10%)", y:0, duration:.18, ease:"power3.out" }}, {T});"""
+    elif kind == "drop":
         js += f"""
       tl.fromTo("{t}", {{ opacity:0, y:-50 }}, {{ opacity:1, y:0, duration:.4, ease:"back.out(1.4)" }}, {T});"""
     elif kind == "stamp":
@@ -292,6 +410,10 @@ def build(captions: list[dict], video: str, w: int, h: int,
     f = FONTS[font_key]
     st = STYLES[style_key]
     st_inner, st_kw = st["inner"], st["kw"]
+    # 重點字放大 1.2 倍、底部對齊(2026-10-26,參考 IG 講座剪輯量到金色字比白字高 1.2 倍、底線對齊)。
+    # inline 字放大本來就是底部對齊;emphasis 款自己有 1.4em,不疊。
+    if "font-size" not in st_kw:
+        st_kw += " font-size:1.2em;"
     # Instagram Reels 安全區。螢幕尺寸 / IG 版本會變動,用比例算不綁單一機型。
     # 數值對齊公開規格(1080x1920):上 ~220px、下 ~450px(UI 蓋住)、右 ~100px(按鈕欄)、左 ~50px。
     # 上=標題列 下=帳號+字幕+音軌+進度條 右=按鈕欄 左=留白。要微調就改這四個係數。
@@ -323,7 +445,7 @@ def build(captions: list[dict], video: str, w: int, h: int,
     # 超出就只把那一句縮到剛好放得下。其他句維持使用者指定的字級。
     pad = re.search(r"padding:\s*\d+px\s+(\d+)px", st_inner)
     room = (w - 2 * round(w * 0.11)) - 2 * (int(pad.group(1)) if pad else 0) - 8
-    kw_scale = 1.4 if "1.4em" in st_kw else 1.0
+    kw_scale = 1.4 if "1.4em" in st_kw else 1.2
 
     def units(text: str, hl: str | None) -> float:
         u = sum(0.55 if ord(ch) < 0x2E80 else 1.0 for ch in text if not ch.isspace())
@@ -333,6 +455,9 @@ def build(captions: list[dict], video: str, w: int, h: int,
         return u
 
     plan, notes = plan_caption_fx(captions)
+    entries, en_notes = plan_entries(captions, plan)
+    notes += en_notes
+    en_cues = []
     l2st = L2_STYLES[l2_style]
     subs, shrunk, l2_clips, fx_js, cues, mk_cues = [], [], [], [], [], []
     for i, c in enumerate(captions):
@@ -346,12 +471,29 @@ def build(captions: list[dict], video: str, w: int, h: int,
             fs = int(room / u * 10) / 10
             size_attr = f' style="font-size:{fs}px"'
             shrunk.append((i, text, fs))
-        inner = _marker_html(text, hl, i) if p.get("kind") == "marker" else hl_html(text, hl, c.get("hl_color"))
+        en = entries.get(i)
+        if p.get("kind") == "marker":
+            inner = _marker_html(text, hl, i)
+        elif en and en["kind"] == "typing":
+            inner = _typing_html(text, hl if hl and hl in text else None, c.get("hl_color"))
+        else:
+            inner = hl_html(text, hl, c.get("hl_color"))
+        en_cls = " en-glitch" if en and en["kind"] == "glitch" else ""
+        if en and en["kind"] == "glitch":
+            n = GLITCH_SLICES
+            slices = "".join(
+                f'<span class="gls" id="gs-{i}-{k}" style="clip-path:inset(-30% {round(100 - (k + 1) * 100 / n, 3)}% -30% {round(k * 100 / n, 3)}%)">{inner}</span>'
+                for k in range(n))
+            inner = f'<span class="glb" id="gb-{i}">{inner}</span>{slices}'
         subs.append(
             f'      <div id="sub-{i}" class="clip sub"{size_attr} data-start="{c["start"]}" '
             f'data-duration="{dur}" data-track-index="5">'
-            f'<span class="sub-inner">{inner}</span></div>'
+            f'<span class="sub-inner{en_cls}">{inner}</span></div>'
         )
+        if en:
+            fx_js.append(_entry_js(en["kind"], i, en["T"], len(text), float(c["end"])))
+            if en.get("sfx"):
+                en_cues.append(en["sfx"])
         if p.get("kind") == "line2":
             T, l2 = p["T"], p["line2"]
             fs2 = int(min(l2st["cap"], 800 / max(1, units(l2, None))))
@@ -370,7 +512,7 @@ def build(captions: list[dict], video: str, w: int, h: int,
                 mk_cues.append(p["sfx"])
     subs_html = "\n".join(subs)
     if fx_out is not None:
-        fx_out.update(plan=plan, notes=notes, cues=cues, mk_cues=mk_cues)
+        fx_out.update(plan=plan, notes=notes, cues=cues, mk_cues=mk_cues, entries=entries, en_cues=en_cues)
 
     used = {p["kind"] for p in plan.values()}
     fx_css = ""
@@ -392,8 +534,15 @@ def build(captions: list[dict], video: str, w: int, h: int,
       .kwmk .mkt { position:relative; z-index:2; color:#fff; }
       .kwmk .mkc { -webkit-text-fill-color:currentColor; }
 """
+    if any(e["kind"] == "glitch" for e in entries.values()):
+        fx_css += """      /* ==== 條紋掃出(captions.json 的 in: glitch):整句切成 8 條直條疊在原位,
+         每條從上下錯位歸位(參考 IG「一堆問題」的訊號雜訊感)。.glb 是佔位的整句(藏起來撐住框的大小) ==== */
+      .en-glitch { position:relative; }
+      .en-glitch .gls { position:absolute; left:0; top:0; right:0; bottom:0; padding:inherit;
+        white-space:nowrap; text-align:center; }
+"""
     fx_clips = ("\n" + "\n".join(l2_clips)) if l2_clips else ""
-    fx_js_block = ("\n      /* ==== CAPTION FX:gen_captions 依 captions.json(line2 / kw_fx)產生,"
+    fx_js_block = ("\n      /* ==== CAPTION FX:gen_captions 依 captions.json(line2 / kw_fx / in)產生,"
                    "要改請改 captions.json 重跑 ==== */" + "".join(fx_js) + "\n") if fx_js else ""
     if shrunk:
         print(f"長句縮字級({len(shrunk)} 句超過字幕框 {room}px,只縮這幾句):", file=sys.stderr)
@@ -533,14 +682,24 @@ def main() -> None:
         else:
             snd = "對焦嗶" if p.get("sfx") else "無音效"
             print(f"螢光筆   sub-{i}  {c['text']} [{c['hl']}] @ {p['T']}({p['src']},{snd})")
+    en = fx["entries"]
+    if en:
+        cnt = {}
+        for e in en.values():
+            cnt[e["kind"]] = cnt.get(e["kind"], 0) + 1
+        print("整句進場:" + "、".join(f"{k} {v} 句" for k, v in cnt.items())
+              + f",其他 {len(captions) - len(en)} 句直接切換")
     for n in fx["notes"]:
         print(n)
     cues_path = args.sfx_cues or args.out.with_name("sfx_cues.json")
     sfx_cues.save(cues_path, "螢光筆", fx["mk_cues"])
+    for wmsg in sfx_cues.save(cues_path, "字幕進場", fx["en_cues"]):
+        print(wmsg)
     for wmsg in sfx_cues.save(cues_path, "兩行字幕", fx["cues"]):
         print(wmsg)
-    if fx["cues"] or fx["mk_cues"]:
-        print(f"wrote {cues_path}({len(fx['cues'])} 個第二行音效、{len(fx['mk_cues'])} 個螢光筆提示音,"
+    if fx["cues"] or fx["mk_cues"] or fx["en_cues"]:
+        print(f"wrote {cues_path}({len(fx['cues'])} 個第二行音效、{len(fx['mk_cues'])} 個螢光筆提示音、"
+              f"{len(fx['en_cues'])} 個電腦輸入鍵盤聲,"
               f"第 7 步 sfx_cues.py mix 會一起混)")
 
     # 樣式側檔:給審片頁用,讓預覽字幕跟成品同字型/字級/位置。
