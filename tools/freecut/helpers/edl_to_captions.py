@@ -35,7 +35,7 @@ word level. Keep a per-user dictionary in 我的剪輯偏好.md and pass it here
 
 Usage:
   python3 edl_to_captions.py <transcript.json> <edl.json> [-o captions.json]
-      [--fixes fixes.json] [--gap 0.30] [--max-width 26]
+      [--fixes fixes.json] [--gap 0.30] [--max-width 12]
   python3 edl_to_captions.py <preview 自己的逐字稿.json> [edl.json] --no-edl [-o captions.json]
       (--no-edl 時 edl.json 只拿來找剪接點當斷行參考,建議一定要給)
       逐字稿是「重轉剪好的 preview」得到的,時間已經是輸出時間軸,不用 EDL 對映。
@@ -46,7 +46,7 @@ Usage:
   光看寬度和停頓會把詞切兩半。有裝 jieba 就先斷詞(繁轉簡斷完再對回原字),
   沒裝就退回舊邏輯並提醒(setup.sh 會裝)。
 
-  --max-width counts CJK chars as 2, ASCII as 1 (26 ≈ 13 個中文字).
+  --max-width counts CJK chars as 2, ASCII as 1. 中文預設 12(一句 4-6 字,最多約 8 字);英文預設 26.
 
 After every EDL change, RE-RUN this from scratch. Never arithmetic-shift old
 caption times — that is exactly the bug this script exists to prevent.
@@ -480,6 +480,95 @@ def group_lines(words, gap_break, max_width):
     return lines
 
 
+# ---- 中文短句斷行(預設)----
+# 2026-10-26 改成一句 4-6 個字(參考 IG 講座剪輯:平均 4-5 字、0.5-0.8 秒換一句,節奏鮮明;
+# Jake 看左右對照選短句)。直接把 group_lines 的寬度改成 12 不行:它是「塞滿再回頭找斷點」,
+# 一行只有 6 個字時能選的斷點太少,剪輯課demo 實測斷出「你/現在看到的這支/影片」
+# 「剪的我連/剪輯軟體」「講的話轉成/文字」。改成整段一起算(動態規劃):每個可斷的位置打分,
+# 選「每行長度接近目標 + 斷點最像句界」總分最好的切法。
+CLAUSE_END = set(",，、。?？!！;；:：")
+# 短句才多擋的:「轉/成文字」「電腦/裡」;「30分鐘他/就幫我」「從頭到尾只/做一件事」(行尾停在主詞、副詞,輕罰)
+BAD_START_SHORT = set("成裡")
+SOFT_END = set("他只也再還")
+BAD_END_SHORT = set("幫讓叫請")   # 「幫/我出片」:動詞跟後面的「我/你」分開很怪
+
+
+def _break_score(words, i, allowed):
+    """在 words[i] 後面斷的好壞(越大越好);不能斷回 None。"""
+    a, b = words[i], words[i + 1]
+    if i in NOBREAK or (allowed is not None and i not in allowed):
+        return None
+    score = 0.0
+    p = pause_between(a, b)
+    score += min(p, 1.0) * 6
+    # 剪接點靠 Whisper 時間標,常偏早一個字(「電腦/裡,30分鐘」「怎麼/做,底下留言」):
+    # 聲音裡真的有停頓才算數,沒有停頓只給一點點分
+    if seam_between(a, b):
+        score += 6 if p >= 0.08 else 1
+    if a["text"][-1:] in CLAUSE_END:   # Whisper 自帶的逗號、頓號:最可靠的句界
+        score += 5
+    if a["text"][-1:] in BREAK_AFTER:
+        score += 1.5
+    if any(b["text"].startswith(x) for x in BREAK_BEFORE):
+        score += 3
+    if any(a["text"].rstrip("".join(CLAUSE_END)).endswith(x) for x in BREAK_BEFORE):
+        score -= 4   # 「一大堆但是/想到」:連接詞要放下一句開頭
+    if a["text"][-1:] in BAD_END_SHORT:
+        score -= 6
+    if a["text"][-1:] in BAD_END or b["text"][:1] in BAD_START or b["text"][:1] in BAD_START_SHORT:
+        score -= 6
+    if a["text"][-1:] in SOFT_END:
+        score -= 2.5
+    return score
+
+
+def group_lines_short(words, gap_break, max_width):
+    n = len(words)
+    if n == 0:
+        return []
+    allowed = word_boundaries(words)
+    M = max(2, max_width // 2)                 # 目標上限(字)
+    lo = max(2, round(M * 0.6))                # 目標下限(字):M=6 → 4
+    widths = [display_width(w["text"].rstrip("".join(CLAUSE_END))) / 2 for w in words]   # 標點不算字數
+    brk = [None] * n                           # brk[i] = 在 words[i] 後面斷的分數
+    for i in range(n - 1):
+        brk[i] = _break_score(words, i, allowed)
+    INF = float("inf")
+    best = [INF] * (n + 1)
+    prev = [0] * (n + 1)
+    best[0] = 0.0
+    for j in range(1, n + 1):                  # 這一行 = words[i:j]
+        if j < n and brk[j - 1] is None:
+            continue
+        end_bonus = 0.0 if j == n else brk[j - 1]
+        chars, inner = 0.0, 0.0
+        for i in range(j - 1, -1, -1):
+            chars += widths[i]
+            if i < j - 1:                      # 行內有長停頓 = 跨句,要罰
+                p = pause_between(words[i], words[i + 1])
+                if p >= gap_break or (seam_between(words[i], words[i + 1]) and p >= 0.08):
+                    inner += 4
+            if chars > M * 1.6 and i < j - 1:   # 斷不開時最多到約 9 字
+                break
+            if best[i] == INF:
+                continue
+            if chars < lo:
+                pen = (lo - chars) * 1.2 + (10 if chars <= 1 else 0)   # 一個字一行最難看
+            elif chars > M:
+                pen = (chars - M) * 1.5
+            else:
+                pen = 0.0
+            cost = best[i] + pen + inner - end_bonus + 1.0   # +1:每多一行一點成本,避免切太碎
+            if cost < best[j]:
+                best[j], prev[j] = cost, i
+    lines, j = [], n
+    while j > 0:
+        i = prev[j]
+        lines.append(words[i:j])
+        j = i
+    return lines[::-1]
+
+
 # ---- 英文斷行(LATIN 模式才用;中文完全走上面的 group_lines)----
 # 上面那套是為中文寫的:貪婪填滿、再回頭找停頓/語氣詞。套在英文上會斷出
 # "means. And then I"、"to Claude. If"、行尾停在 "my"(2026-10-05 實測)。
@@ -576,7 +665,7 @@ def main():
     ap.add_argument("--gap", type=float, default=0.30,
                     help="original-audio pause (s) that allows a line break")
     ap.add_argument("--max-width", type=int, default=None,
-                    help="max display width per line (CJK=2, ASCII=1)。預設 26;"
+                    help="max display width per line (CJK=2, ASCII=1)。中文預設 12(一句 4-6 字);英文預設 26,"
                          "有給 --font-size 就照字級算,直接給這個就以這個為準")
     ap.add_argument("--font-size", type=int, default=None,
                     help="填跟 gen_captions --font-size 一樣的數字。英文影片:一行的長度照字級算到剛好放得下;"
@@ -637,8 +726,10 @@ def main():
             room = (W - 2 * round(W * 0.11)) - 2 * 26 - 8
             args.max_width = int(room / (0.55 * args.font_size))
             print(f"  一行長度照字級算:{args.font_size}px → --max-width {args.max_width}", file=sys.stderr)
-        else:
+        elif LATIN:
             args.max_width = 26
+        else:
+            args.max_width = 12   # 中文預設一句 4-6 個字(group_lines_short)
     kept = map_to_output(raw, ranges)
     words = kept if LATIN else merge_latin(kept)   # 碎片合併只給中文模式(英文會把整句黏成一個字)
 
@@ -673,7 +764,9 @@ def main():
 
     mark_seams(words)
 
-    lines = (group_lines_latin if LATIN else group_lines)(words, args.gap, args.max_width)
+    # 中文:預設短句(group_lines_short);自己給 --max-width 20 以上 = 要長句,走舊的 group_lines(實測多支片的那套)
+    chinese = group_lines_short if args.max_width < 20 else group_lines
+    lines = (group_lines_latin if LATIN else chinese)(words, args.gap, args.max_width)
 
     caps = []
     for ln in lines:
