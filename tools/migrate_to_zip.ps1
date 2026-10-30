@@ -3,10 +3,10 @@
   用法：powershell -ExecutionPolicy Bypass -File .\setup.ps1
   （舊版更新後本來就會跑 setup.ps1，現在 setup.ps1 只做這件事）
 
-  只覆蓋、只新增，不刪任何東西（auto mode 下刪除指令常被擋住）：
-    覆蓋：說明書（CLAUDE.md、AGENTS.md、.claude/skills）、tools\、素材庫\預設包、審片.html
+  覆蓋：說明書（CLAUDE.md、AGENTS.md、.claude/skills）、tools\、素材庫\預設包、審片.html
     保留：我的影片、我的剪輯偏好.md、錯誤回報、學員自己加進素材庫的檔案
-    不動：舊的 Python 環境 tools\freecut\.venv（不再使用，之後想清空間可以刪）
+    刪除：舊的 Python 環境 tools\freecut\.venv —— 只在新版確認能跑之後才刪
+    刪除寫在這支腳本裡，AI 只跑一個指令（auto mode 下 AI 自己打刪除指令常被擋住）
 #>
 $ErrorActionPreference = "Stop"
 $KIT = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -68,8 +68,19 @@ if (-not (Test-Path (Join-Path $KIT "我的剪輯偏好.md"))) { Copy-Item (Join
 Write-Host ""
 & (Join-Path $KIT "tools\run.cmd") python (Join-Path $KIT "tools\startup.py")
 
+# 5. 新版的 Python 確定能跑，才刪舊的 Python 環境
+$OLDVENV = Join-Path $KIT "tools\freecut\.venv"
+if (Test-Path $OLDVENV) {
+  & (Join-Path $KIT "tools\run.cmd") python -c "import faster_whisper, numpy" *> $null
+  if ($LASTEXITCODE -eq 0) {
+    try { Remove-Item -Recurse -Force $OLDVENV; Write-Host "[OK] 清掉舊的 Python 環境，新版用不到。" }
+    catch { Write-Host "[!] 舊的 Python 環境沒刪乾淨（可能有檔案正在使用），不影響新版。" }
+  } else { Write-Host "[!] 新版的 Python 還沒確認能跑，舊的 Python 環境先留著。" }
+}
+Remove-Item -Recurse -Force $TMP -ErrorAction SilentlyContinue
+Remove-Item -Force $ZIP -ErrorAction SilentlyContinue   # 已經解開放進工具包了，下載的 zip 不用留（省 1GB）
+
 Write-Host ""
 Write-Host ("=== 已經換成新版（" + (Get-Content (Join-Path $KIT "VERSION") -ErrorAction SilentlyContinue) + "）===")
 Write-Host "你的影片、剪輯偏好、錯誤回報都還在。"
-if (Test-Path (Join-Path $KIT "tools\freecut\.venv")) { Write-Host "舊的 Python 環境 tools\freecut\.venv 不再使用，之後想清空間可以刪掉。" }
 Write-Host "請關掉這個對話，開一個新對話再說「幫我剪」：新版的說明書要在新對話才會讀到。"

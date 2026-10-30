@@ -5,10 +5,11 @@
 # 為什麼：新版把 Python、ffmpeg、特效引擎都放在資料夾裡，不用再裝東西，之後從
 # github.com/jackie81030/ai-video-editor-zip 自動更新。舊版 GitHub 之後不再更新。
 #
-# 會做的事（只覆蓋、只新增，不刪任何東西 —— auto mode 下刪除指令常被擋住）：
+# 會做的事：
 #   覆蓋：說明書（CLAUDE.md、AGENTS.md、.claude/skills）、tools/、素材庫/預設包、審片.html
 #   保留：我的影片、我的剪輯偏好.md、錯誤回報、學員自己加進素材庫的檔案
-#   不動：舊的 Python 環境 tools/freecut/.venv（不再使用，約 1GB，之後想清空間可以刪）
+#   刪除：舊的 Python 環境 tools/freecut/.venv（約 1GB）—— 只在新版確認能跑之後才刪
+#   刪除寫在這支腳本裡，AI 只跑一個指令（auto mode 下 AI 自己打刪除指令常被擋住）
 set -u
 KIT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="https://github.com/jackie81030/ai-video-editor-zip/releases/latest/download"
@@ -68,10 +69,20 @@ for d in 我的影片 錯誤回報; do mkdir -p "$KIT/$d"; done
 echo ""
 bash "$KIT/tools/run.sh" python "$KIT/tools/startup.py"
 
+# 5. 新版的 Python 確定能跑，才刪舊的 Python 環境（不再使用，約 1GB）
+OLDVENV="$KIT/tools/freecut/.venv"
+if [ -d "$OLDVENV" ]; then
+  if bash "$KIT/tools/run.sh" python -c "import faster_whisper, numpy" >/dev/null 2>&1; then
+    SZ="$(du -sh "$OLDVENV" 2>/dev/null | cut -f1)"
+    rm -rf "$OLDVENV" && echo "[OK] 清掉舊的 Python 環境（$SZ），新版用不到。"
+  else
+    echo "[!] 新版的 Python 還沒確認能跑，舊的 Python 環境先留著（$OLDVENV）。"
+  fi
+fi
+rm -rf "$TMP"
+rm -f "$DL/$ZIP"   # 已經解開放進工具包了，下載的 zip 不用留（省 0.5GB）
+
 echo ""
 echo "=== 已經換成新版（$(cat "$KIT/VERSION" 2>/dev/null)）==="
 echo "你的影片、剪輯偏好、錯誤回報都還在。"
-if [ -d "$KIT/tools/freecut/.venv" ]; then
-  echo "舊的 Python 環境 tools/freecut/.venv 不再使用（約 $(du -sh "$KIT/tools/freecut/.venv" 2>/dev/null | cut -f1)），之後想清空間可以刪掉。"
-fi
 echo "請關掉這個對話，開一個新對話再說「幫我剪」：新版的說明書要在新對話才會讀到。"
