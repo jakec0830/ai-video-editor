@@ -359,6 +359,7 @@ $PY $H/gen_captions.py ../captions.json --video preview_vN.mp4 \
 ```
 - **`init` 一定要在空的 `captions/` 跑。** 裡面已經有檔案(例如先放了 captions.json)會失敗(Directory not empty)。captions.json 放在 `工作檔/`(上一層),不要放進 `captions/`。
 - **給 creative.py 用的底稿存成 `base.tpl`,不要叫 `base.html`。** `hyperframes lint` 會把資料夾裡每個 .html 當成一個 composition,多一個就報錯(2026-10-22 實測)。
+- **creative.py 一律用 `creative_inject.write_index()` 寫出 index.html**(`from creative_inject import write_index`,用法在檔案開頭)。Python 跟 JS 共用的時間點放進 `consts={...}`,它自動宣告成 JS const;JS 用到沒宣告的全大寫名字會直接擋下。婉芬-03 實測:JS 用了 Python 才有的 `D0`,瀏覽器一載入就 "D0 is not defined",**整條特效時間軸沒跑**,lint 0 error、snapshot 照拍(拍到的是沒特效的畫面)。
 `gen_captions` 把「工程上會出錯的部分」全部封好了(這些坑手寫必踩):影片 `data-start="0"`、字幕 `z-index` 要壓過影片不然字幕跑到影片後面看不到、每個 clip 要 `class="clip"`+`data-*`+唯一 id、`@font-face` 不寫字型會 fallback 成黑體。它留了 `CREATIVE LAYER` / `CREATIVE TIMELINE` 兩個插槽給你加特效(第 5/5.5 步)。**框架穩、內容活** — 斷句/highlight/特效都還是你量身出的。
 
 **★ 加過特效之後不要再重跑 `gen_captions`** — 它是整份重產 index.html,你寫在 CREATIVE LAYER /
@@ -420,7 +421,7 @@ cp "<專案>/工作檔/captions/樣式.json" "<專案>/審片區/樣式.json" 2>
 GSAP 疊層,跟字幕同一個 composition。**提案裡用到特效工具箱的工具,照 `tools/特效工具箱.md` 的做法寫**(每個工具的程式碼 + 踩過的坑都在那;動態 b-roll 的完整範例在 `tools/特效型錄/範例-動態b-roll.html`)。那份的「共通規則」一定要照:
 - **大特效掛在「審片鎖定的字幕句首」**,不要逐字對時 —— 字級時間不準,實測用音量切、用短片重跑 Whisper 都失敗過。重擊類只用在短的那幾個字,整句一個字一個字砸會蓋臉又對不上。
 - 中文大字要指定粗黑中文字體(英文字體沒有中文,會退成細字);字級用字數算;超過 12 字的字幕要縮字級(不然會偏一邊被切掉)。
-- 加完先 `npx hyperframes snapshot --at 秒數,秒數 --no-end` 看位置、出界、蓋臉,再 render。
+- 加完先跑 `npx hyperframes check`,**runtime 那段不能有 `page_error`**(lint 抓不到 JS 執行錯誤,錯了整條特效都不會動);過了再 `npx hyperframes snapshot --at 秒數,秒數 --no-end` 看位置、出界、蓋臉,再 render。
 - **特效做好就直接 render 一版放進審片頁給他看,不要先傳圖片或文字描述。** 特效要看節奏才知道對不對,圖片和文字都看不出節奏(Jake 2026-10-22:「說好進入特效,就直接發揮所長佈局特效,用審片給他看」)。跟初審一樣:你先做到好,他看完再說要改哪裡。snapshot 照樣用來**自己**檢查位置和出界(5.9),只是不拿去給他審。例外:偏好檔寫了「先給我看圖」或他當下要求,才先拼圖。他給了參考圖就照著描(半透明疊上去對齊),不要憑印象重畫;改的時候只改他點名的那一項。
 - 句首 ≠ 開口:字幕句常從換氣空白開始,大特效落下前量一下那句開頭的音量,晚開口就往後挪。
 
@@ -655,7 +656,7 @@ ffmpeg -y -i <專案>/工作檔/render_final.mp4 -i sfx1.mp3 -i bgm.mp3 -filter_
 1. **驗成品**:`ffprobe` 確認長度對(比對 render_final 的實際長度);**影音長度要實際解碼比對** — 容器標示會騙人(loudnorm bug 的檔案容器寫 59s、實際解碼只有 56s):`ffmpeg -i 成品.mp4 -vn -f null -` 看最後的 time= 是不是等於影片長度,差超過 0.2 秒就是音訊被截斷,不能交付;抽 1-2 個影格確認字幕在畫面上;確認專案根目錄**只有一個**成品.mp4、沒有多的副本或「成品/」資料夾。
 2. **整備審片區(最終版)**:把成品對應的 preview(或成品本身的複本)+ 最終 `字幕.json` 覆蓋進 `審片區/`,再重跑一次 `make_review_page.py ... --no-open` 更新 `開始審片.html`(這次加 `--no-open`,下一步會直接幫他開成品,不用跳兩個視窗)— 之後他想重看最終版,跟你說一聲你就幫他開。這些檔從此**不歸 cleanup 刪**。
 3. **交付 = 幫他把成品選起來 + 一句話**:跑 `"$PY" "$H/open_file.py" "<專案>/成品.mp4" --reveal`(在 Finder／檔案總管裡把成品選起來;**不要用預設程式直接開 mp4** — Windows 舊版 Media Player 開不了,學員連兩次卡在「我打不開」)。你的介面能把檔案直接丟進對話的就也丟一份。然後說:「完成了!成品幫你在資料夾裡選起來了(我的影片/<專案名>/成品.mp4,長度 X 秒)。想重看審片版跟我說,我幫你開。」
-4. **主動問要不要封面**:「要發 IG 的話,我可以順手做一張封面圖(大字版鉤子)」— IG 縮圖抓第 0 格,而鉤子卡通常不在第 0 格,學員的封面會是一片空(實測中招)。要的話:`"$PY" $H/make_cover.py <專案>/工作檔/preview_vN.mp4 --title "鉤子文案" --time <表情好的那一秒>`(**從還沒燒字幕的 preview 抓**,用成品抓會帶到一句不相干的字幕),產出丟對話給他看,換畫面改 --time;字壓到臉(站姿、雙人中景換 --time 也躲不掉)就加 `--pos top` 或 `--pos bottom`。文字自動落在 IG 九宮格/Reels UI 的安全區內。
+4. **主動問要不要封面**:「要發 IG 的話,我可以順手做一張封面圖(大字版鉤子)」— IG 縮圖抓第 0 格,而鉤子卡通常不在第 0 格,學員的封面會是一片空(實測中招)。要的話:`"$PY" $H/make_cover.py <專案>/工作檔/preview_vN.mp4 --title "品牌名或關鍵字" --line2 "問句鉤子？" [--chips "步驟一,步驟二,步驟三"] --time <那一秒> -o <專案>/封面.png`(**從還沒燒字幕的 preview 抓**,用成品抓會帶到一句不相干的字幕)。版型是黃色 3D 大字 + 白色問句 + 上方步驟膠囊 + 梅紫漸層(2026-11-17 Jake 定,舊的灰底條被說「太醜」);標題用他講的事寫成問句、帶品牌名(例「天麗 / 到底要怎麼擦？」),畫面挑**拿著產品**或表情好的那格。產出丟對話給他看,換畫面改 --time;預設 `--pos top`,字壓到臉就換 `--pos bottom`。文字自動落在 IG 九宮格 4:5 裁切線內。
 4. **更新兩份筆記**(見下面收尾)。
 5. **復盤 + 回傳**(見下面收尾)— 這步是流程的一部分,不是可有可無的加問。
 
