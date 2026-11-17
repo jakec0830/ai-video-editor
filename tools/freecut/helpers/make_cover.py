@@ -51,7 +51,8 @@ HEAVY_SANS = [
 ]
 SERIF_FILES = [HOME / "AppData/Local/Microsoft/Windows/Fonts/SourceHanSerifTC-Heavy.otf",
                HOME / "AppData/Local/Microsoft/Windows/Fonts/SourceHanSerifTC-Bold.otf",
-               HOME / "Library/Fonts/SourceHanSerifTC-Bold.otf"]
+               HOME / "Library/Fonts/SourceHanSerifTC-Bold.otf",
+               Path(__file__).resolve().parents[2] / "fonts" / "SourceHanSerifTC-Bold.otf"]   # zip 版工具包自帶的字型
 
 YELLOW = (255, 212, 0)
 YELLOW_DEPTH = [(217, 168, 0), (201, 151, 0), (184, 138, 0), (148, 111, 0), (112, 84, 0)]
